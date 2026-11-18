@@ -13,7 +13,7 @@ import {
   EyeOff,
   ArrowRight,
   BookOpen,
-  Sparkles,
+ 
   UserRound,
 } from "lucide-react";
 
