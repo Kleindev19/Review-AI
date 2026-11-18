@@ -39,6 +39,20 @@
   color: inherit !important;
 }
 
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .quiz-answer-option[aria-pressed="true"] {
+  background-color: #f0edff;
+  border-color: #7c6df5;
+  color: #16324f;
+}
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .quiz-answer-option[aria-pressed="true"] .quiz-answer-letter {
+  background-color: #7c6df5;
+  border-color: #7c6df5;
+  color: #ffffff;
+}
+
 /* ==========================================
    DARK MODE VARIABLES
    Works with data attribute OR .dark class

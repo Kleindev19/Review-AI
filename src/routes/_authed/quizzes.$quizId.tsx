@@ -1237,14 +1237,14 @@ export default function QuizPage() {
                               }
                               disabled={busy}
                               aria-pressed={selected}
-                              className={`flex w-full items-center gap-3 rounded-lg border px-3.5 py-2.5 text-left text-[13.5px] transition-colors disabled:opacity-50 ${
+                              className={`quiz-answer-option flex w-full items-center gap-3 rounded-lg border px-3.5 py-2.5 text-left text-[13.5px] transition-colors disabled:opacity-50 ${
                                 selected
                                   ? "border-primary/60 bg-primary/10 text-foreground"
                                   : "border-border text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
                               }`}
                             >
                               <span
-                                className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px] font-medium ${
+                                className={`quiz-answer-letter grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px] font-medium ${
                                   selected
                                     ? "border-primary bg-primary text-primary-foreground"
                                     : "border-border text-muted-foreground"
