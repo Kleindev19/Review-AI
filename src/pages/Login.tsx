@@ -1,10 +1,6 @@
 
 import { useEffect, useState, type FormEvent } from "react";
-import {
-  Link,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import {
   Mail,
@@ -13,7 +9,6 @@ import {
   EyeOff,
   ArrowRight,
   BookOpen,
- 
   UserRound,
 } from "lucide-react";
 
@@ -32,27 +27,29 @@ export default function Login() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Reset temporary form state when switching modes
   useEffect(() => {
     setPassword("");
     setConfirmPassword("");
     setShowPassword(false);
     setErrorMessage("");
     setSuccessMessage("");
+    setNeedsConfirmation(false);
   }, [isRegister]);
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (loading) return;
 
     setErrorMessage("");
     setSuccessMessage("");
+    setNeedsConfirmation(false);
 
     if (isRegister) {
       if (!displayName.trim()) {
@@ -61,9 +58,7 @@ export default function Login() {
       }
 
       if (password.length < 8) {
-        setErrorMessage(
-          "Password must be at least 8 characters."
-        );
+        setErrorMessage("Password must be at least 8 characters.");
         return;
       }
 
@@ -77,11 +72,11 @@ export default function Login() {
 
     try {
       if (isRegister) {
-        // REGISTER USER
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
+            emailRedirectTo: `${window.location.origin}/login`,
             data: {
               display_name: displayName.trim(),
             },
@@ -96,31 +91,66 @@ export default function Login() {
         if (data.session) {
           navigate("/", { replace: true });
         } else {
+          setNeedsConfirmation(true);
           setSuccessMessage(
-            "Registration submitted! Please check your email for a confirmation link if required."
+            "Account created! Please check your email to confirm your account."
           );
         }
       } else {
-        // LOGIN USER
-        const { error } =
-          await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
-          });
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
 
         if (error) {
           setErrorMessage(error.message);
+
+          if (
+            error.message.toLowerCase().includes("email not confirmed")
+          ) {
+            setNeedsConfirmation(true);
+          }
+
           return;
         }
 
         navigate("/", { replace: true });
       }
     } catch {
-      setErrorMessage(
-        "Something went wrong. Please try again."
-      );
+      setErrorMessage("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResendConfirmation() {
+    if (!email.trim() || resending) return;
+
+    setResending(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: email.trim(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/login`,
+        },
+      });
+
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
+
+      setSuccessMessage(
+        "If your account is eligible, a new confirmation email has been sent."
+      );
+    } catch {
+      setErrorMessage("Unable to resend the email. Please try again.");
+    } finally {
+      setResending(false);
     }
   }
 
@@ -132,28 +162,31 @@ export default function Login() {
           "radial-gradient(circle at 10% 15%, #a9e4ff, transparent 40%), radial-gradient(circle at 85% 15%, #d3f4ff, transparent 40%), linear-gradient(135deg, #eaf8ff, #c9ecff 55%, #eefaff)",
       }}
     >
-      {/* MAIN AUTH CONTAINER */}
-      <div className="w-full max-w-[1150px] rounded-[32px] border border-white/90 bg-white/55 p-2 shadow-[0_25px_80px_rgba(35,121,175,0.18)] backdrop-blur-xl sm:p-3">
+      {/* COMPACT MAIN AUTH CONTAINER */}
+      <div className="w-full max-w-[520px] rounded-[30px] border border-white/90 bg-white/55 p-2 shadow-[0_25px_80px_rgba(35,121,175,0.18)] backdrop-blur-xl sm:p-3">
 
-        <div className="grid overflow-hidden rounded-[25px] bg-white/85 lg:grid-cols-2">
+        {/* SINGLE COLUMN - NO EMPTY RIGHT SIDE */}
+        <div className="overflow-hidden rounded-[24px] bg-white/85">
 
-
-          {/* RIGHT AUTH PANEL */}
-          <div className="flex min-h-[650px] flex-col justify-between bg-[#f8fcff]/95 p-6 sm:p-10 lg:min-h-[700px]">
+          <div className="flex flex-col bg-[#f8fcff]/95 p-6 sm:p-8">
 
             {/* TOP BRAND */}
             <div className="flex items-center justify-between">
-              <img src="/studyroom-logo.svg" alt="" className="h-11 w-11" />
+              <img
+                src="/studyroom-logo.svg"
+                alt="StudyRoom"
+                className="h-11 w-11 object-contain"
+              />
 
               <span className="rounded-full border border-sky-100 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-600">
                 StudyRoom
               </span>
             </div>
 
-            {/* AUTH FORM */}
-            <div className="mx-auto w-full max-w-[380px] py-8">
+            {/* AUTH CONTENT */}
+            <div className="mx-auto w-full max-w-[380px] py-8 sm:py-9">
 
-              {/* SWITCH LOGIN / REGISTER */}
+              {/* SIGN IN / SIGN UP */}
               <div className="mb-7 flex rounded-xl border border-sky-100 bg-[#eaf7ff] p-1">
 
                 <Link
@@ -187,9 +220,7 @@ export default function Login() {
                 </p>
 
                 <h1 className="text-3xl font-extrabold tracking-tight text-[#18384d] sm:text-4xl">
-                  {isRegister
-                    ? "Create Account"
-                    : "Welcome Back"}
+                  {isRegister ? "Create Account" : "Welcome Back"}
                 </h1>
 
                 <p className="mt-3 text-sm text-slate-500">
@@ -199,11 +230,10 @@ export default function Login() {
                 </p>
               </div>
 
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-4"
-              >
-                {/* FULL NAME - REGISTER ONLY */}
+              {/* AUTH FORM */}
+              <form onSubmit={handleSubmit} className="space-y-4">
+
+                {/* FULL NAME - REGISTRATION ONLY */}
                 {isRegister && (
                   <div>
                     <label
@@ -224,9 +254,7 @@ export default function Login() {
                         type="text"
                         placeholder="Enter your full name"
                         value={displayName}
-                        onChange={(e) =>
-                          setDisplayName(e.target.value)
-                        }
+                        onChange={(e) => setDisplayName(e.target.value)}
                         autoComplete="name"
                         required
                         className="h-12 w-full rounded-xl border border-sky-100 bg-white/90 pl-12 pr-4 text-sm text-[#18384d] outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
@@ -255,9 +283,7 @@ export default function Login() {
                       type="email"
                       placeholder="you@example.com"
                       value={email}
-                      onChange={(e) =>
-                        setEmail(e.target.value)
-                      }
+                      onChange={(e) => setEmail(e.target.value)}
                       autoComplete="email"
                       required
                       className="h-12 w-full rounded-xl border border-sky-100 bg-white/90 pl-12 pr-4 text-sm text-[#18384d] outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
@@ -282,18 +308,12 @@ export default function Login() {
 
                     <input
                       id="auth-password"
-                      type={
-                        showPassword ? "text" : "password"
-                      }
+                      type={showPassword ? "text" : "password"}
                       placeholder="Enter your password"
                       value={password}
-                      onChange={(e) =>
-                        setPassword(e.target.value)
-                      }
+                      onChange={(e) => setPassword(e.target.value)}
                       autoComplete={
-                        isRegister
-                          ? "new-password"
-                          : "current-password"
+                        isRegister ? "new-password" : "current-password"
                       }
                       required
                       minLength={isRegister ? 8 : undefined}
@@ -302,13 +322,9 @@ export default function Login() {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        setShowPassword(!showPassword)
-                      }
+                      onClick={() => setShowPassword(!showPassword)}
                       aria-label={
-                        showPassword
-                          ? "Hide password"
-                          : "Show password"
+                        showPassword ? "Hide password" : "Show password"
                       }
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-600"
                     >
@@ -321,7 +337,7 @@ export default function Login() {
                   </div>
                 </div>
 
-                {/* CONFIRM PASSWORD - REGISTER ONLY */}
+                {/* CONFIRM PASSWORD - REGISTRATION ONLY */}
                 {isRegister && (
                   <div>
                     <label
@@ -339,9 +355,7 @@ export default function Login() {
 
                       <input
                         id="auth-confirm"
-                        type={
-                          showPassword ? "text" : "password"
-                        }
+                        type={showPassword ? "text" : "password"}
                         placeholder="Confirm your password"
                         value={confirmPassword}
                         onChange={(e) =>
@@ -375,6 +389,20 @@ export default function Login() {
                   </div>
                 )}
 
+                {/* RESEND CONFIRMATION */}
+                {needsConfirmation && (
+                  <button
+                    type="button"
+                    onClick={handleResendConfirmation}
+                    disabled={resending}
+                    className="w-full text-center text-sm font-semibold text-sky-600 transition hover:text-sky-700 disabled:opacity-60"
+                  >
+                    {resending
+                      ? "Sending confirmation..."
+                      : "Resend confirmation email"}
+                  </button>
+                )}
+
                 {/* SUBMIT BUTTON */}
                 <button
                   type="submit"
@@ -387,9 +415,7 @@ export default function Login() {
                       : "Signing in..."
                   ) : (
                     <>
-                      {isRegister
-                        ? "Create Account"
-                        : "Sign In"}
+                      {isRegister ? "Create Account" : "Sign In"}
                       <ArrowRight size={17} />
                     </>
                   )}
@@ -421,12 +447,13 @@ export default function Login() {
                   </>
                 )}
               </p>
+
             </div>
 
             {/* BOTTOM INFO */}
-            <div className="rounded-2xl border border-sky-100 bg-[#eaf7ff] px-5 py-4">
+            <div className="rounded-2xl border border-sky-100 bg-[#eaf7ff] px-4 py-4 sm:px-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-sky-500 shadow-sm">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-sky-500 shadow-sm">
                   <BookOpen size={20} />
                 </div>
 
