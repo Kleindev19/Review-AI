@@ -512,7 +512,7 @@ export default function ReviewerPage() {
           REVIEWER HEADER
       ====================================== */}
 
-      <header className="space-y-4">
+      <header className="reviewer-detail-header space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
 
           {/* TITLE AND SUBJECT */}
