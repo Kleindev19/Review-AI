@@ -71,6 +71,7 @@ type GeneratedResponse = {
 // ==========================================
 
 const MIN_CHARACTERS = 60;
+const MAX_AI_CHARACTERS = 100000;
 
 const MODES = [
   {
@@ -178,7 +179,8 @@ export default function CreateReviewerPage() {
 
   const characters = activeText.trim().length;
 
-  const ready = characters >= MIN_CHARACTERS;
+const ready = characters >= MIN_CHARACTERS;
+const exceedsAiLimit = characters > MAX_AI_CHARACTERS;
 
   // ==========================================
   // AUTO-HIDE SUCCESS MESSAGE
@@ -522,9 +524,16 @@ export default function CreateReviewerPage() {
   // ==========================================
 
   async function generateReviewer() {
-    if (!ready || generating || saving || saved) {
-      return;
-    }
+  if (!ready || generating || saving || saved) {
+    return;
+  }
+
+  if (exceedsAiLimit) {
+    setError(
+      "This document is too long for one AI request. Please split it into smaller sections."
+    );
+    return;
+  }
 
     const apiBaseUrl = String(
       import.meta.env.VITE_API_BASE_URL ?? ""
@@ -939,17 +948,11 @@ export default function CreateReviewerPage() {
                       {selectedMaterial.title}
                     </p>
 
-                    <p className="text-xs text-muted-foreground">
-                      {selectedMaterial.extractedText
-                        .trim()
-                        .length.toLocaleString()}
-
-                      {" characters extracted · "}
-
-                      {selectedMaterial.location === "cloud"
-                        ? "Saved in Supabase"
-                        : "Available on this device"}
-                    </p>
+                   <p className="text-xs text-muted-foreground">
+  {selectedMaterial.location === "cloud"
+    ? "Saved to your StudyRoom account"
+    : "Available on this device"}
+</p>
 
                     {selectedMaterial.extractedText
                       .trim()
@@ -1026,12 +1029,12 @@ export default function CreateReviewerPage() {
                 {/* CHARACTER COUNT */}
 
                 <p className="text-xs text-muted-foreground">
-                  {characters.toLocaleString()} characters
-
-                  {characters > 0 &&
-                    characters < MIN_CHARACTERS &&
-                    " · Add more content to continue"}
-                </p>
+  {characters === 0
+    ? "Paste your notes to get started."
+    : ready
+      ? "Your notes are ready."
+      : "Add more content to continue."}
+</p>
               </div>
             )}
 
@@ -1052,11 +1055,19 @@ export default function CreateReviewerPage() {
 
             <div className="mt-5 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
 
-              <p className="text-xs text-muted-foreground">
-                {ready
-                  ? "Your material is ready."
-                  : "Provide at least 60 characters of material."}
-              </p>
+              <p
+  className={`text-xs ${
+    exceedsAiLimit
+      ? "text-destructive"
+      : "text-muted-foreground"
+  }`}
+>
+  {exceedsAiLimit
+    ? "This document is too large for one AI request. Split it into smaller sections."
+    : ready
+      ? "Your material is ready."
+      : "Add more study material to continue."}
+</p>
 
               <div className="flex flex-wrap gap-2">
 
@@ -1079,18 +1090,19 @@ export default function CreateReviewerPage() {
 
                 {/* GENERATE AI REVIEWER */}
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    void generateReviewer()
-                  }
-                  disabled={
-                    !ready ||
-                    generating ||
-                    loadingMaterial
-                  }
-                  className="btn btn-primary disabled:opacity-50"
-                >
+               <button
+  type="button"
+  onClick={() =>
+    void generateReviewer()
+  }
+  disabled={
+    !ready ||
+    exceedsAiLimit ||
+    generating ||
+    loadingMaterial
+  }
+  className="btn btn-primary disabled:opacity-50"
+>
                   {generating ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (

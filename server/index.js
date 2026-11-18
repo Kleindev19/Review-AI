@@ -35,7 +35,7 @@ if (process.env.NODE_ENV === "production") {
 }
 
 app.use(cors(secureCorsOptions));
-app.use(express.json({ limit: "100kb" }));
+app.use(express.json({ limit: "1mb" }));
 
 // Require a valid Supabase login for Gemini generation.
 // Rate limiting runs first to reduce abusive requests.
@@ -77,10 +77,10 @@ function validateStudyText(text, res) {
     return null;
   }
 
-  if (text.length > 20000) {
+  if (text.length > 100000) {
     res.status(400).json({
       error:
-        "Study material is too long (maximum: 20,000 characters).",
+        "Study material is too long (maximum: 100,000 characters).",
     });
     return null;
   }

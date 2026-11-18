@@ -479,9 +479,9 @@ export default function QuizzesPage() {
       return;
     }
 
-    if (text.length > 20000) {
+    if (text.length > 100000) {
       setError(
-        "Study material must not exceed 20,000 characters."
+        "Study material must not exceed 100,000 characters."
       );
       return;
     }
