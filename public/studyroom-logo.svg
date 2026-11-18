@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect x="4" y="4" width="120" height="120" rx="29" fill="#071F41"/>
+  <path d="M34 33h39c0 11 14 14 14 26v28L64 99 34 87V33Z" fill="#D6E6F5"/>
+  <rect x="42" y="45" width="11" height="11" rx="2" fill="#09294F"/>
+  <rect x="42" y="59" width="11" height="11" rx="2" fill="#09294F"/>
+  <path d="m44 50 3 3 6-7M44 64l3 3 6-7" stroke="#D6E6F5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M59 49h22M59 63h22M43 77h38" stroke="#648DB8" stroke-width="4" stroke-linecap="round"/>
+  <path d="M20 70c9-16 31-22 51-19-24 1-41 10-48 21-4 7 0 11 8 13-13-1-18-7-11-15Z" fill="#56AEF1"/>
+  <path d="M76 52c21 1 32 7 30 14-4 13-28 25-57 33 32-6 55-17 62-29 5-10-8-18-35-18Z" fill="#56AEF1"/>
+  <path d="M22 89c17-2 33 3 42 13-10-8-26-10-43-6l1-7ZM106 89c-17-2-33 3-42 13 10-8 26-10 43-6l-1-7Z" fill="#56AEF1"/>
+  <path d="M28 75c15 0 28 7 36 20 8-13 21-20 36-20l5 8c-18-2-32 4-41 17-9-13-23-19-41-17l5-8Z" fill="#D6E6F5"/>
+  <path d="M87 31c2 8 5 11 12 13-7 2-10 5-12 13-2-8-5-11-12-13 7-2 10-5 12-13ZM103 44c1.2 4.5 3 6.3 7 7.5-4 1.2-5.8 3-7 7.5-1.2-4.5-3-6.3-7-7.5 4-1.2 5.8-3 7-7.5Z" fill="#78C7FF"/>
+</svg>

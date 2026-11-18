@@ -1,0 +1,493 @@
+
+/* ==========================================
+   STUDYROOM SIDEBAR
+   Premium Light Mode
+   ========================================== */
+
+/* ==========================================
+   MAIN SIDEBAR
+   ========================================== */
+
+.studyroom-layout .study-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 30;
+
+  width: 248px;
+  height: 100vh;
+  height: 100dvh;
+
+  display: flex;
+  flex-direction: column;
+
+  background: #ffffff;
+  border-right: 1px solid #e3e8f0;
+
+  color: #20283a;
+
+  box-shadow: none;
+
+  font-family: inherit;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ==========================================
+   BRAND SECTION
+   ========================================== */
+
+.studyroom-layout .study-sidebar-brand {
+  flex-shrink: 0;
+
+  padding: 22px 18px 18px;
+
+  border-bottom: 1px solid #eef0f5;
+  margin-bottom: 6px;
+}
+
+.studyroom-layout .study-brand-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  text-decoration: none;
+
+  color: #20283a;
+
+  border-radius: 10px;
+}
+
+.studyroom-layout .study-brand-logo {
+  display: grid;
+  place-items: center;
+
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+
+  border-radius: 11px;
+
+  background: transparent;
+}
+
+.studyroom-layout .study-brand-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.studyroom-layout .study-brand-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  min-width: 0;
+}
+
+.studyroom-layout .study-brand-info strong {
+  display: block;
+
+  color: #20283a;
+
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+
+  letter-spacing: -0.025em;
+}
+
+.studyroom-layout .study-brand-info span {
+  display: block;
+
+  margin-top: 3px;
+
+  color: #788397;
+
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+/* ==========================================
+   NAVIGATION CONTAINER
+   ========================================== */
+
+.studyroom-layout .study-sidebar-navigation {
+  flex: 1;
+  min-height: 0;
+
+  padding: 19px 12px 16px;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  scrollbar-width: thin;
+  scrollbar-color: #dfe3ec transparent;
+}
+
+.studyroom-layout
+.study-sidebar-navigation::-webkit-scrollbar {
+  width: 5px;
+}
+
+.studyroom-layout
+.study-sidebar-navigation::-webkit-scrollbar-thumb {
+  background: #dfe3ec;
+  border-radius: 10px;
+}
+
+.studyroom-layout
+.study-sidebar-navigation::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ==========================================
+   NAVIGATION GROUPS
+   ========================================== */
+
+.studyroom-layout .study-sidebar-group {
+  margin-bottom: 25px;
+}
+
+.studyroom-layout .study-sidebar-group-label {
+  margin: 0 0 9px;
+  padding: 0 11px;
+
+  color: #7b8798;
+
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+
+  letter-spacing: 0.035em;
+  text-transform: none;
+}
+
+.studyroom-layout .study-sidebar-items {
+  display: flex;
+  flex-direction: column;
+
+  gap: 3px;
+}
+
+/* ==========================================
+   DEFAULT NAVIGATION LINK
+   ========================================== */
+
+.studyroom-layout .study-sidebar-link {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+
+  gap: 11px;
+
+  width: 100%;
+  min-height: 39px;
+
+  padding: 9px 12px;
+
+  border: 1px solid transparent;
+  border-radius: 9px;
+
+  background: transparent;
+
+  color: #566277;
+  text-decoration: none;
+
+  font-size: 13px;
+  font-weight: 450;
+  line-height: 1.35;
+
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease;
+
+  cursor: pointer;
+}
+
+.studyroom-layout .study-sidebar-link span {
+  color: inherit;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================
+   NAVIGATION ICONS
+   ========================================== */
+
+.studyroom-layout
+.study-sidebar-link .study-sidebar-link-icon {
+  width: 17px;
+  height: 17px;
+
+  flex-shrink: 0;
+
+  color: #8792a4;
+
+  stroke-width: 1.8;
+
+  transition: color 0.18s ease;
+}
+
+/* ==========================================
+   NAVIGATION HOVER
+   ========================================== */
+
+.studyroom-layout
+.study-sidebar-link:hover:not(.active) {
+  background: #f5f6fb;
+
+  color: #28364b;
+
+  border-color: transparent;
+}
+
+.studyroom-layout
+.study-sidebar-link:hover:not(.active)
+.study-sidebar-link-icon {
+  color: #6254d6;
+}
+
+/* ==========================================
+   ACTIVE NAVIGATION
+   ========================================== */
+
+.studyroom-layout .study-sidebar-link.active {
+  background: #efedfc;
+
+  color: #5143b8;
+
+  border-color: #e9e5fa;
+
+  font-weight: 600;
+}
+
+.studyroom-layout
+.study-sidebar-link.active
+.study-sidebar-link-icon {
+  color: #6254d6;
+
+  stroke-width: 2;
+}
+
+.studyroom-layout
+.study-sidebar-link.active:hover {
+  background: #e9e5fb;
+
+  color: #5143b8;
+}
+
+/* ==========================================
+   EXTRA NAVIGATION
+   Create Reviewer / Profile
+   ========================================== */
+
+.studyroom-layout .study-sidebar-extra {
+  display: flex;
+  flex-direction: column;
+
+  gap: 3px;
+
+  margin-top: 12px;
+  padding-top: 18px;
+
+  border-top: 1px solid #e9edf4;
+}
+
+.studyroom-layout
+.study-sidebar-extra .study-sidebar-link {
+  color: #566277;
+}
+
+.studyroom-layout
+.study-sidebar-extra .study-sidebar-link.active {
+  color: #5143b8;
+}
+
+/* ==========================================
+   PROFILE FOOTER
+   ========================================== */
+
+.studyroom-layout .study-sidebar-footer {
+  flex-shrink: 0;
+
+  margin-top: auto;
+
+  padding: 13px 12px 15px;
+
+  background: #ffffff;
+
+  border-top: 1px solid #e9edf4;
+}
+
+/* ==========================================
+   PROFILE CONTAINER
+   ========================================== */
+
+.studyroom-layout .study-sidebar-user {
+  display: flex;
+  align-items: center;
+
+  width: 100%;
+  min-width: 0;
+
+  gap: 10px;
+
+  padding: 10px;
+
+  border: 1px solid #e9edf4;
+  border-radius: 11px;
+
+  background: #f8f9fc;
+
+  text-decoration: none;
+  color: #20283a;
+
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.studyroom-layout
+.study-sidebar-user:hover {
+  background: #f2f0fc;
+  border-color: #ddd8f6;
+}
+
+/* ==========================================
+   PROFILE AVATAR
+   ========================================== */
+
+.studyroom-layout .study-sidebar-avatar {
+  display: grid;
+  place-items: center;
+
+  flex-shrink: 0;
+
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+
+  padding: 0;
+
+  overflow: hidden;
+
+  border-radius: 50%;
+
+  border: 1px solid #e1ddf5;
+
+  background: #eae6fb;
+
+  color: #6254d6;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  line-height: 1;
+}
+
+/* Actual Supabase profile picture */
+
+.studyroom-layout .study-sidebar-avatar img {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+  object-position: center;
+
+  border-radius: 50%;
+}
+
+/* ==========================================
+   PROFILE USER INFORMATION
+   ========================================== */
+
+.studyroom-layout .study-sidebar-user-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+
+  gap: 4px;
+
+  min-width: 0;
+  overflow: hidden;
+}
+
+.studyroom-layout
+.study-sidebar-user-info strong {
+  display: block;
+
+  max-width: 100%;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  color: #253047;
+
+  font-size: 12px;
+  font-weight: 650;
+
+  line-height: 1.3;
+}
+
+.studyroom-layout
+.study-sidebar-user-info span {
+  display: block;
+
+  max-width: 100%;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  color: #7b8798;
+
+  font-size: 10.5px;
+  font-weight: 400;
+
+  line-height: 1.3;
+}
+
+/* ==========================================
+   ACCESSIBILITY
+   ========================================== */
+
+.studyroom-layout .study-brand-link:focus-visible,
+.studyroom-layout .study-sidebar-link:focus-visible,
+.studyroom-layout .study-sidebar-user:focus-visible {
+  outline: 2px solid #6254d6;
+  outline-offset: 3px;
+}
+
+/* ==========================================
+   RESPONSIVE BEHAVIOR
+   Desktop sidebar only
+   ========================================== */
+
+@media (max-width: 1023px) {
+  .studyroom-layout .study-sidebar {
+    display: none;
+  }
+}
+
+/* ==========================================
+   REDUCED MOTION
+   ========================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .studyroom-layout .study-sidebar *,
+  .studyroom-layout .study-sidebar *::before,
+  .studyroom-layout .study-sidebar *::after {
+    transition: none;
+  }
+}

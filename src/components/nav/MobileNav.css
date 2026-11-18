@@ -1,0 +1,74 @@
+
+/* Base44 StudyRoom mobile bottom navigation */
+
+.studyroom-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .studyroom-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+
+    display: block;
+
+    background: rgba(12, 14, 18, 0.95);
+    border-top: 1px solid #292c34;
+
+    padding-bottom: env(safe-area-inset-bottom);
+
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .studyroom-bottom-nav-inner {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+
+    max-width: 448px;
+    margin: 0 auto;
+  }
+
+  .studyroom-bottom-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    gap: 5px;
+    min-width: 0;
+    min-height: 60px;
+    padding: 8px 2px;
+
+    color: #9296a2;
+    text-align: center;
+    text-decoration: none;
+
+    font-size: 10px;
+    font-weight: 500;
+
+    transition: color 0.2s ease;
+  }
+
+  .studyroom-bottom-link:hover {
+    color: #f0f1f4;
+  }
+
+  .studyroom-bottom-link.active {
+    color: #c5f277;
+  }
+
+  .studyroom-bottom-link span {
+    white-space: nowrap;
+  }
+
+  /* Space for fixed mobile navigation */
+  .studyroom-page {
+    padding-bottom: calc(
+      100px + env(safe-area-inset-bottom)
+    );
+  }
+}

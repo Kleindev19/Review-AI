@@ -1,0 +1,688 @@
+
+/* ==========================================
+   STUDYROOM LIGHT / DARK THEME
+   Complete Theme CSS
+   ========================================== */
+
+/* ==========================================
+   LIGHT MODE TOGGLE
+   ========================================== */
+
+#root .studyroom-theme-toggle {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  min-width: 86px;
+  height: 38px;
+  padding: 8px 14px;
+
+  background: #ffffff !important;
+  color: #2e4e7e !important;
+
+  border: 1.5px solid #2e4e7e !important;
+  border-radius: 999px !important;
+
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none !important;
+}
+
+#root .studyroom-theme-toggle:hover {
+  background: #f2f6fe !important;
+}
+
+#root .studyroom-theme-toggle svg,
+#root .studyroom-theme-toggle span {
+  color: inherit !important;
+}
+
+/* ==========================================
+   DARK MODE VARIABLES
+   Works with data attribute OR .dark class
+   ========================================== */
+
+:root:is(
+  [data-studyroom-theme="dark"],
+  .dark
+) {
+  color-scheme: dark;
+
+  --sr-bg: #0b1220;
+  --sr-sidebar: #101827;
+  --sr-card: #162236;
+  --sr-card-hover: #203149;
+
+  --sr-text: #eaf0fb;
+  --sr-muted: #a9b9d0;
+  --sr-border: #2d3d54;
+  --sr-purple: #b6aaff;
+  --sr-purple-soft: #302a52;
+
+  /* Existing StudyRoom variables */
+
+  --bg: #0b1220;
+  --bg-soft: #101827;
+
+  --surface: #162236;
+  --surface-2: #203149;
+  --surface-3: #263752;
+
+  --text: #eaf0fb;
+  --text-soft: #a9b9d0;
+  --text-muted: #91a5c1;
+
+  --border: 215 32% 25%;
+  --input: 215 30% 30%;
+
+  --background: 221 49% 8%;
+  --foreground: 217 64% 95%;
+
+  --card: 217 42% 15%;
+  --card-foreground: 217 64% 95%;
+
+  --popover: 217 42% 15%;
+  --popover-foreground: 217 64% 95%;
+
+  --secondary: 216 40% 20%;
+  --secondary-foreground: 217 64% 95%;
+
+  --muted: 216 40% 20%;
+  --muted-foreground: 215 36% 76%;
+
+  --primary: 249 100% 83%;
+  --primary-foreground: 221 49% 10%;
+
+  --accent: 249 31% 25%;
+  --accent-foreground: 250 100% 91%;
+
+  --ring: 249 100% 83%;
+
+  --sidebar-background: 218 42% 11%;
+  --sidebar-border: 215 32% 25%;
+
+  /* Tailwind theme tokens */
+
+  --color-background: #0b1220;
+  --color-foreground: #eaf0fb;
+
+  --color-card: #162236;
+  --color-card-foreground: #eaf0fb;
+
+  --color-popover: #162236;
+  --color-popover-foreground: #eaf0fb;
+
+  --color-secondary: #203149;
+  --color-secondary-foreground: #eaf0fb;
+
+  --color-muted: #203149;
+  --color-muted-foreground: #a9b9d0;
+
+  --color-primary: #b6aaff;
+  --color-primary-foreground: #101827;
+
+  --color-border: #2d3d54;
+  --color-input: #425776;
+  --color-ring: #b6aaff;
+
+  --studyroom-button-ink: #dbe8ff;
+  --studyroom-button-border: #809abd;
+  --studyroom-button-hover: #253752;
+}
+
+/* ==========================================
+   GLOBAL DARK BACKGROUND
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark),
+html:is([data-studyroom-theme="dark"], .dark) body,
+html:is([data-studyroom-theme="dark"], .dark) #root,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-layout,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-content,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page {
+  background: #0b1220 !important;
+  color: #eaf0fb !important;
+}
+
+/* ==========================================
+   TOP HEADER
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-topbar {
+  background: #101827 !important;
+  border-color: #2d3d54 !important;
+  color: #eaf0fb !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-breadcrumb,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-breadcrumb a {
+  color: #a9b9d0 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-breadcrumb strong,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-mobile-brand,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-mobile-brand strong {
+  color: #eaf0fb !important;
+}
+
+/* ==========================================
+   DESKTOP SIDEBAR
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar {
+  background: #101827 !important;
+  border-color: #2d3d54 !important;
+  color: #eaf0fb !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-brand,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-extra,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-footer {
+  background: #101827 !important;
+  border-color: #2d3d54 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-brand-info strong,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-user-info strong {
+  color: #eaf0fb !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-brand-info span,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-user-info span,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-group-label {
+  color: #a9b9d0 !important;
+}
+
+/* Sidebar links */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-link {
+  background: transparent !important;
+  color: #a9b9d0 !important;
+  border-color: transparent !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-link:hover {
+  background: #203149 !important;
+  color: #eaf0fb !important;
+}
+
+/* Active navigation */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-link.active {
+  background: #302a52 !important;
+  border-color: #4d4478 !important;
+  color: #d7d0ff !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-link.active svg {
+  color: #b6aaff !important;
+}
+
+/* User profile */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-user {
+  background: #162236 !important;
+  color: #eaf0fb !important;
+  border-color: #2d3d54 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .study-sidebar-avatar {
+  background: #302a52 !important;
+  color: #d7d0ff !important;
+  border-color: #4d4478 !important;
+}
+
+/* ==========================================
+   DASHBOARD CARDS / PANELS
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page :is(
+  .panel,
+  .card,
+  .dashboard-card,
+  .study-card,
+  .section-card,
+  .bg-card,
+  .bg-white
+) {
+  background: #162236 !important;
+  border-color: #2d3d54 !important;
+  color: #eaf0fb !important;
+  box-shadow: none !important;
+}
+
+/* Section dividers */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page :is(
+  .border-border,
+  [class*="border-border/"]
+) {
+  border-color: #2d3d54 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page .divide-y > * + * {
+  border-color: #2d3d54 !important;
+}
+
+/* Hover rows */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page .row-hover:hover {
+  background: #203149 !important;
+}
+
+/* ==========================================
+   FONTS / TEXT
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page h1,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page h2,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page h3,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page .text-foreground,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page .text-card-foreground {
+  color: #eaf0fb !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page .text-muted-foreground {
+  color: #a9b9d0 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page .text-primary {
+  color: #b6aaff !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page [class*="text-foreground/"] {
+  color: #d1ddee !important;
+}
+
+/* ==========================================
+   BACKGROUND UTILITIES
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page .bg-background {
+  background: #0b1220 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page :is(
+  .bg-secondary,
+  .bg-muted
+) {
+  background: #203149 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page [class*="bg-secondary/"] {
+  background: rgba(32, 49, 73, 0.7) !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page [class*="bg-background/"] {
+  background: rgba(11, 18, 32, 0.65) !important;
+}
+
+/* ==========================================
+   FORMS / INPUT FIELDS
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page :is(
+  input,
+  select,
+  textarea,
+  .input,
+  .select,
+  .textarea
+) {
+  background: #101a2b !important;
+  color: #eaf0fb !important;
+  border-color: #425776 !important;
+  color-scheme: dark;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page input::placeholder,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page textarea::placeholder {
+  color: #96a9c4 !important;
+  opacity: 1;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page select option {
+  background: #162236 !important;
+  color: #eaf0fb !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page label {
+  color: #eaf0fb;
+}
+
+/* ==========================================
+   ROUNDED PILL ACTION BUTTONS
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page :is(a.btn, button.btn),
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-new-btn,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-theme-toggle {
+  background: #17253b !important;
+  color: #dbe8ff !important;
+
+  border: 1.5px solid #809abd !important;
+  border-radius: 999px !important;
+
+  box-shadow: none !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page :is(a.btn, button.btn):hover,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-new-btn:hover,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-theme-toggle:hover {
+  background: #253752 !important;
+  color: #ffffff !important;
+  border-color: #b0c2e0 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-page .btn svg,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-theme-toggle svg {
+  color: inherit !important;
+}
+
+/* ==========================================
+   MOBILE DRAWER
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-layout :is(
+  .studyroom-drawer,
+  .studyroom-drawer-header,
+  .studyroom-drawer-links,
+  .studyroom-drawer-footer
+) {
+  background: #101827 !important;
+  border-color: #2d3d54 !important;
+  color: #eaf0fb !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-drawer-brand-info strong {
+  color: #eaf0fb !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-drawer-brand-info span,
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-drawer-group-label {
+  color: #a9b9d0 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-drawer-link {
+  background: transparent !important;
+  color: #a9b9d0 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-drawer-link.active {
+  background: #302a52 !important;
+  color: #d7d0ff !important;
+}
+
+/* Menu and close buttons */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root :is(
+  .studyroom-menu-btn,
+  .studyroom-drawer-close
+) {
+  background: #162236 !important;
+  color: #eaf0fb !important;
+  border-color: #2d3d54 !important;
+}
+
+/* ==========================================
+   MOBILE BOTTOM NAVIGATION
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-bottom-nav {
+  background: #101827 !important;
+  border-color: #2d3d54 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-bottom-link {
+  background: transparent !important;
+  color: #a9b9d0 !important;
+}
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-bottom-link.active {
+  background: #302a52 !important;
+  color: #d7d0ff !important;
+}
+
+/* ==========================================
+   LOGOUT BUTTON
+   ========================================== */
+
+html:is([data-studyroom-theme="dark"], .dark)
+#root .studyroom-drawer-logout :is(button, a) {
+  background: #3a2532 !important;
+  color: #ffb6bf !important;
+  border-color: #805064 !important;
+}
+
+/* ==========================================
+   MOBILE THEME TOGGLE
+   ========================================== */
+
+@media (max-width: 1023px) {
+  #root .studyroom-layout
+  .studyroom-actions > .studyroom-theme-toggle {
+    display: inline-flex !important;
+  }
+}
+
+@media (max-width: 639px) {
+  #root .studyroom-theme-toggle {
+    width: 39px;
+    min-width: 39px;
+    height: 39px;
+    padding: 0;
+  }
+
+  #root .studyroom-theme-toggle span {
+    display: none;
+  }
+}
+
+
+/* ==========================================
+   STUDYROOM LIGHT MODE
+   ROW HOVER INDICATOR
+   ========================================== */
+
+/* Smooth hover transitions */
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .row-hover,
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .divide-y > * {
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease;
+}
+
+/* ==========================================
+   HOVER BACKGROUND
+   ========================================== */
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .row-hover:hover,
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .divide-y > *:hover {
+  background-color: #e9eefc !important;
+
+  box-shadow:
+    inset 3px 0 0 #6254d6 !important;
+}
+
+/* ==========================================
+   KEYBOARD FOCUS INDICATOR
+   ========================================== */
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .row-hover:focus-within,
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .divide-y > *:focus-within {
+  background-color: #e9eefc !important;
+
+  box-shadow:
+    inset 3px 0 0 #6254d6 !important;
+}
+
+/* ==========================================
+   ACTIVE HOVER BUTTONS
+   ========================================== */
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .row-hover:hover .btn,
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .divide-y > *:hover .btn {
+  border-color: #8296c5 !important;
+}
+
+/* ==========================================
+   ACCESSIBILITY
+   ========================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  #root .studyroom-page .row-hover,
+  #root .studyroom-page .divide-y > * {
+    transition: none !important;
+  }
+}
+
+
+/* ==========================================
+   STUDYROOM LIGHT MODE
+   STRONGER ROW HOVER INDICATOR
+   ========================================== */
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .row-hover,
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .divide-y > * {
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease;
+}
+
+/* Stronger background and left indicator */
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .row-hover:hover,
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .divide-y > *:hover {
+  background: #dce5ff !important;
+
+  box-shadow:
+    inset 4px 0 0 #5545ca !important;
+}
+
+/* Darker text while hovered */
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .row-hover:hover .text-foreground,
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .divide-y > *:hover .text-foreground {
+  color: #33278f !important;
+}
+
+/* Keyboard focus also gets highlighted */
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .row-hover:focus-within,
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .divide-y > *:focus-within {
+  background: #dce5ff !important;
+
+  box-shadow:
+    inset 4px 0 0 #5545ca !important;
+}
+
+/* More visible action buttons on hovered row */
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .row-hover:hover .btn,
+
+html:not([data-studyroom-theme="dark"]):not(.dark)
+#root .studyroom-page .divide-y > *:hover .btn {
+  border-color: #5545ca !important;
+}
+
+/* Reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  #root .studyroom-page .row-hover,
+  #root .studyroom-page .divide-y > * {
+    transition: none !important;
+  }
+}

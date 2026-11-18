@@ -1,0 +1,713 @@
+
+/* ==========================================
+   STUDYROOM MOBILE RESPONSIVE FIX
+   Premium Light Mode
+   ========================================== */
+
+/* ==========================================
+   MOBILE AND TABLET
+   ========================================== */
+
+@media (max-width: 1023px) {
+
+  /* ========================================
+     GLOBAL LAYOUT
+     ======================================== */
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 320px;
+    margin: 0;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .studyroom-layout {
+    display: block !important;
+
+    width: 100%;
+    min-height: 100dvh;
+
+    grid-template-columns: minmax(0, 1fr) !important;
+
+    background: #f6f8fc;
+  }
+
+  /* Hide desktop sidebar */
+
+  .studyroom-layout .study-sidebar {
+    display: none !important;
+  }
+
+  .studyroom-layout .studyroom-content {
+    display: flex;
+    flex-direction: column;
+
+    width: 100%;
+    min-width: 0;
+    min-height: 100dvh;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    background: #f6f8fc;
+  }
+
+  /* ========================================
+     MOBILE TOP HEADER
+     ======================================== */
+
+  .studyroom-layout .studyroom-topbar {
+    position: sticky;
+    top: 0;
+
+    z-index: 35;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    width: 100%;
+    min-height: 62px;
+
+    padding: 10px 18px;
+
+    background: rgba(255, 255, 255, 0.97);
+
+    border-bottom: 1px solid #e4e8f0;
+
+    box-shadow: 0 1px 3px rgba(20, 35, 65, 0.03);
+
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  /* Mobile brand */
+
+  .studyroom-layout .studyroom-mobile-brand {
+    display: inline-flex !important;
+    align-items: center;
+
+    gap: 9px;
+
+    min-width: 0;
+
+    color: #20283a;
+
+    font-size: 15px;
+    font-weight: 700;
+
+    text-decoration: none;
+  }
+
+  .studyroom-mobile-brand svg {
+    color: #6254d6;
+  }
+
+  .studyroom-mobile-brand strong {
+    color: #20283a;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+  }
+
+  /* Desktop breadcrumb not needed */
+
+  .studyroom-layout .studyroom-breadcrumb {
+    display: none !important;
+  }
+
+  /* Mobile header actions */
+
+  .studyroom-layout .studyroom-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+
+    gap: 8px;
+
+    margin-left: auto;
+  }
+
+  /*
+    Hide desktop New Reviewer and Logout
+    in mobile header.
+
+    Create is already in bottom navigation.
+    Logout remains available inside drawer.
+  */
+
+  .studyroom-actions > :not(.studyroom-menu-btn) {
+    display: none !important;
+  }
+
+  /* Menu button */
+
+  .studyroom-layout .studyroom-menu-btn {
+    display: grid !important;
+    place-items: center;
+
+    width: 40px;
+    height: 40px;
+
+    padding: 0;
+
+    border: 1px solid #e3e7ef;
+    border-radius: 10px;
+
+    background: #ffffff;
+
+    color: #334155;
+
+    cursor: pointer;
+
+    transition:
+      background 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .studyroom-menu-btn:hover {
+    background: #f1effc;
+    border-color: #dcd6f6;
+  }
+
+  .studyroom-menu-btn svg {
+    color: #334155;
+  }
+
+  /* ========================================
+     MAIN PAGE CONTENT
+     ======================================== */
+
+  .studyroom-layout .studyroom-page {
+    display: block;
+
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+
+    flex: 1;
+
+    margin: 0 !important;
+
+    padding:
+      22px
+      18px
+      calc(100px + env(safe-area-inset-bottom))
+      !important;
+
+    background: transparent;
+
+    overflow-x: clip;
+  }
+
+  .studyroom-page > div {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /* Prevent oversized dashboard panels */
+
+  .studyroom-page .panel {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .studyroom-page .truncate {
+    min-width: 0;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .studyroom-page img,
+  .studyroom-page video {
+    max-width: 100%;
+  }
+
+  /* ========================================
+     MOBILE BOTTOM NAVIGATION
+     ======================================== */
+
+  .studyroom-layout .studyroom-bottom-nav {
+    position: fixed;
+
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+    z-index: 45;
+
+    display: block !important;
+
+    width: 100%;
+
+    background: rgba(255, 255, 255, 0.97) !important;
+
+    border-top: 1px solid #e3e8f0 !important;
+
+    box-shadow:
+      0 -4px 18px rgba(25, 40, 75, 0.035);
+
+    padding-bottom:
+      env(safe-area-inset-bottom);
+
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  /* Bottom nav grid */
+
+  .studyroom-layout .studyroom-bottom-nav-inner {
+    display: grid !important;
+
+    grid-template-columns:
+      repeat(5, minmax(0, 1fr));
+
+    align-items: stretch;
+
+    width: 100%;
+    max-width: 520px;
+
+    margin: 0 auto;
+
+    padding: 5px 7px;
+  }
+
+  /* Individual navigation item */
+
+  .studyroom-layout .studyroom-bottom-link {
+    position: relative;
+
+    display: flex;
+    flex-direction: column;
+
+    align-items: center;
+    justify-content: center;
+
+    gap: 5px;
+
+    min-width: 0;
+    min-height: 61px;
+
+    padding: 8px 2px;
+
+    border-radius: 10px;
+
+    background: transparent;
+
+    color: #788397 !important;
+
+    text-decoration: none;
+    text-align: center;
+
+    font-size: 10px;
+    font-weight: 500;
+
+    transition:
+      color 0.18s ease,
+      background 0.18s ease;
+  }
+
+  /* Icons */
+
+  .studyroom-bottom-link :is(svg, img) {
+    width: 20px;
+    height: 20px;
+
+    flex-shrink: 0;
+    object-fit: contain;
+
+    color: currentColor;
+
+    stroke-width: 1.8;
+  }
+
+  /* Labels */
+
+  .studyroom-bottom-link span {
+    display: block;
+
+    max-width: 100%;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    color: inherit;
+
+    font-size: 10px;
+    font-weight: inherit;
+    line-height: 1.3;
+  }
+
+  /* Hover */
+
+  .studyroom-layout
+  .studyroom-bottom-link:hover {
+    background: #f6f4fe;
+
+    color: #6254d6 !important;
+  }
+
+  /* Selected tab */
+
+  .studyroom-layout
+  .studyroom-bottom-link.active {
+    background: #f0edfc !important;
+
+    color: #6254d6 !important;
+
+    font-weight: 650;
+  }
+
+  .studyroom-bottom-link.active svg {
+    color: #6254d6;
+    stroke-width: 2.1;
+  }
+
+  /* Keyboard accessibility */
+
+  .studyroom-bottom-link:focus-visible {
+    outline: 2px solid #6254d6;
+    outline-offset: -2px;
+  }
+
+  /* ========================================
+     MOBILE MENU OVERLAY
+     ======================================== */
+
+  .studyroom-layout .studyroom-drawer-overlay {
+    position: fixed !important;
+
+    inset: 0;
+
+    z-index: 100 !important;
+
+    display: block !important;
+
+    width: 100%;
+    height: 100dvh;
+  }
+
+  /* Dark backdrop appears only
+     when navigation drawer is opened */
+
+  .studyroom-layout .studyroom-drawer-backdrop {
+    position: absolute;
+
+    inset: 0;
+
+    display: block;
+
+    width: 100%;
+    height: 100%;
+
+    padding: 0;
+    margin: 0;
+
+    border: 0;
+
+    background: rgba(15, 23, 42, 0.45) !important;
+
+    cursor: pointer;
+  }
+
+  /* ========================================
+     WHITE NAVIGATION DRAWER
+     ======================================== */
+
+  .studyroom-layout .studyroom-drawer {
+    position: absolute !important;
+
+    top: 0;
+    right: 0;
+    bottom: 0;
+
+    z-index: 1;
+
+    display: flex !important;
+    flex-direction: column;
+
+    width: min(85vw, 330px) !important;
+    max-width: 330px;
+    height: 100dvh;
+
+    margin: 0 !important;
+    padding: 0;
+
+    background: #ffffff !important;
+
+    border-left: 1px solid #e3e8f0;
+
+    box-shadow:
+      -16px 0 45px rgba(15, 23, 42, 0.14);
+
+    color: #20283a;
+
+    overflow: hidden;
+  }
+
+  /* ========================================
+     DRAWER HEADER
+     ======================================== */
+
+  .studyroom-layout .studyroom-drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    flex-shrink: 0;
+
+    min-height: 66px;
+
+    padding: 16px 20px;
+
+    border-bottom: 1px solid #e9edf4;
+
+    background: #ffffff;
+
+    color: #20283a;
+  }
+
+  .studyroom-drawer-header strong {
+    color: #20283a;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .studyroom-layout
+  .studyroom-drawer-header button {
+    display: grid;
+    place-items: center;
+
+    width: 36px;
+    height: 36px;
+
+    border: 1px solid #e3e8f0;
+    border-radius: 9px;
+
+    background: #f8f9fc;
+    color: #475569;
+
+    cursor: pointer;
+  }
+
+  /* ========================================
+     DRAWER NAVIGATION
+     ======================================== */
+
+  .studyroom-layout .studyroom-drawer-links {
+    display: flex;
+    flex-direction: column;
+
+    flex: 1;
+    min-height: 0;
+
+    gap: 20px;
+
+    padding:
+      22px
+      15px
+      calc(24px + env(safe-area-inset-bottom));
+
+    overflow-y: auto;
+
+    background: #ffffff;
+  }
+
+  /* Navigation group label */
+
+  .studyroom-layout
+  .studyroom-drawer-group-label {
+    margin: 0 0 10px;
+
+    padding: 0 10px;
+
+    color: #7b8798;
+
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.035em;
+  }
+
+  /* Drawer links */
+
+  .studyroom-layout .studyroom-drawer-link {
+    display: flex;
+    align-items: center;
+
+    gap: 12px;
+
+    min-height: 43px;
+
+    padding: 10px 12px;
+
+    border-radius: 10px;
+
+    background: transparent;
+
+    color: #526078 !important;
+
+    font-size: 13px;
+    font-weight: 500;
+
+    text-decoration: none;
+
+    transition:
+      background 0.2s ease,
+      color 0.2s ease;
+  }
+
+  .studyroom-drawer-link :is(svg, img) {
+    width: 18px;
+    height: 18px;
+
+    color: currentColor;
+    object-fit: contain;
+  }
+
+  .studyroom-drawer-link span {
+    color: inherit;
+  }
+
+  /* Drawer hover */
+
+  .studyroom-layout
+  .studyroom-drawer-link:hover {
+    background: #f6f4fc;
+
+    color: #6254d6 !important;
+  }
+
+  /* Drawer active link */
+
+  .studyroom-layout
+  .studyroom-drawer-link.active {
+    background: #efedfc !important;
+
+    color: #6254d6 !important;
+
+    font-weight: 650;
+  }
+
+  /* Extra drawer links */
+
+  .studyroom-layout .studyroom-drawer-extra {
+    display: flex;
+    flex-direction: column;
+
+    gap: 2px;
+
+    padding-top: 15px;
+
+    margin-top: 4px;
+
+    border-top: 1px solid #e9edf4;
+  }
+
+  /* ========================================
+     DIALOG / DRAWER Z-INDEX
+     ======================================== */
+
+  .studyroom-layout .studyroom-drawer-overlay {
+    isolation: isolate;
+  }
+
+  /* ========================================
+     GENERAL MOBILE TEXT
+     ======================================== */
+
+  .studyroom-page h1,
+  .studyroom-page h2,
+  .studyroom-page h3 {
+    overflow-wrap: anywhere;
+  }
+
+  .studyroom-page input,
+  .studyroom-page select,
+  .studyroom-page textarea {
+    max-width: 100%;
+
+    font-size: 16px;
+  }
+
+}
+
+/* ==========================================
+   SMALL PHONES
+   ========================================== */
+
+@media (max-width: 520px) {
+
+  .studyroom-layout .studyroom-page {
+    padding:
+      18px
+      16px
+      calc(98px + env(safe-area-inset-bottom))
+      !important;
+  }
+
+  .studyroom-layout .studyroom-topbar {
+    padding: 10px 16px;
+  }
+
+  .studyroom-page h1 {
+    font-size: 24px;
+    line-height: 1.25;
+  }
+
+  /*
+    Make dashboard statistics two columns
+    when the StatStrip directly contains
+    links to the four study libraries.
+  */
+
+  .studyroom-page
+  .grid:has(> a[href="/reviewers"]):has(> a[href="/quizzes"]) {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Smaller dashboard card padding */
+
+  .studyroom-page .panel {
+    max-width: 100%;
+  }
+
+  .studyroom-page .row-hover {
+    min-width: 0;
+  }
+
+}
+
+/* ==========================================
+   DESKTOP
+   ========================================== */
+
+@media (min-width: 1024px) {
+  .studyroom-layout .studyroom-bottom-nav {
+    display: none !important;
+  }
+
+  .studyroom-layout .studyroom-drawer-overlay {
+    display: none !important;
+  }
+}
+
+/* ==========================================
+   REDUCED MOTION
+   ========================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .studyroom-bottom-link,
+  .studyroom-drawer-link,
+  .studyroom-menu-btn {
+    transition: none !important;
+  }
+}
