@@ -1,4 +1,8 @@
+
 import { saveMaterial } from "../../lib/materialStore";
+import { extractPdfVisuals } from "../../lib/pdfVisuals";
+import { extractImageVisual } from "../../lib/imageVisuals";
+
 import {
   useRef,
   useState,
@@ -14,43 +18,48 @@ import {
   Loader2,
 } from "lucide-react";
 
-// ==========================================
-// TYPES
-// ==========================================
+type VisualPage = {
+  pageNumber: number;
+  mimeType: "image/jpeg";
+  dataUrl: string;
+};
 
 type UploadResult = {
   text: string;
   sourceLabel: string;
-  materialId: string;
+  materialId: string | null;
+  visuals?: VisualPage[];
 };
 
 type UploadPanelProps = {
   onReady: (result: UploadResult | null) => void;
 };
 
-type UploadStatus = "idle" | "reading" | "saving" | "ready";
-// ==========================================
-// CONFIGURATION
-// ==========================================
+type UploadStatus =
+  | "idle"
+  | "reading"
+  | "saving"
+  | "ready";
 
-const ALLOWED = ["pdf", "docx", "txt"];
+const ALLOWED = [
+  "pdf",
+  "docx",
+  "txt",
+  "jpg",
+  "jpeg",
+  "png",
+];
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
 const STEPS = [
   "Choose file",
-  "Extract text",
+  "Process content",
   "Ready to generate",
 ];
 
-// ==========================================
-// FORMAT FILE SIZE
-// ==========================================
-
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
+  if (bytes < 1024) return `${bytes} B`;
 
   if (bytes < 1024 * 1024) {
     return `${(bytes / 1024).toFixed(1)} KB`;
@@ -58,10 +67,6 @@ function formatBytes(bytes: number): string {
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-
-// ==========================================
-// PDF TEXT EXTRACTION
-// ==========================================
 
 async function extractPdf(file: File): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
@@ -79,7 +84,6 @@ async function extractPdf(file: File): Promise<string> {
   });
 
   const pdf = await loadingTask.promise;
-
   const pages: string[] = [];
 
   try {
@@ -90,33 +94,30 @@ async function extractPdf(file: File): Promise<string> {
     ) {
       const page = await pdf.getPage(pageNumber);
 
-      const content = await page.getTextContent();
+      try {
+        const content = await page.getTextContent();
+        let pageText = "";
 
-      let pageText = "";
-
-      for (const item of content.items) {
-        if ("str" in item) {
-          pageText += item.str;
-          pageText += item.hasEOL ? "\n" : " ";
+        for (const item of content.items) {
+          if ("str" in item) {
+            pageText += item.str;
+            pageText += item.hasEOL ? "\n" : " ";
+          }
         }
-      }
 
-      if (pageText.trim()) {
-        pages.push(pageText.trim());
+        if (pageText.trim()) {
+          pages.push(pageText.trim());
+        }
+      } finally {
+        page.cleanup();
       }
-
-      page.cleanup();
     }
   } finally {
-  await loadingTask.destroy();
-}
+    await loadingTask.destroy();
+  }
 
   return pages.join("\n\n");
 }
-
-// ==========================================
-// WORD DOCUMENT EXTRACTION
-// ==========================================
 
 async function extractDocx(file: File): Promise<string> {
   const mammoth = await import("mammoth");
@@ -128,33 +129,6 @@ async function extractDocx(file: File): Promise<string> {
   return result.value;
 }
 
-// ==========================================
-// EXTRACT TEXT BASED ON FILE TYPE
-// ==========================================
-
-async function extractFileText(
-  file: File,
-  extension: string
-): Promise<string> {
-  switch (extension) {
-    case "txt":
-      return file.text();
-
-    case "pdf":
-      return extractPdf(file);
-
-    case "docx":
-      return extractDocx(file);
-
-    default:
-      throw new Error("Unsupported file format.");
-  }
-}
-
-// ==========================================
-// MAIN UPLOAD PANEL
-// ==========================================
-
 export default function UploadPanel({
   onReady,
 }: UploadPanelProps) {
@@ -165,26 +139,22 @@ export default function UploadPanel({
     useState<UploadStatus>("idle");
 
   const [file, setFile] = useState<File | null>(null);
-
   const [characters, setCharacters] = useState(0);
+  const [visualCount, setVisualCount] = useState(0);
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
 
-const busy =
-  status === "reading" ||
-  status === "saving";
-
-  // ========================================
-  // PROCESS UPLOADED FILE
-  // ========================================
+  const busy =
+    status === "reading" ||
+    status === "saving";
 
   async function processFile(picked?: File) {
     if (!picked || processingRef.current) return;
 
     onReady(null);
-
     setFile(null);
     setCharacters(0);
+    setVisualCount(0);
     setError("");
     setStatus("idle");
 
@@ -193,15 +163,13 @@ const busy =
 
     if (!ALLOWED.includes(extension)) {
       setError(
-        "Only PDF, Word (.docx), and TXT files are supported."
+        "Only PDF, DOCX, TXT, JPG and PNG files are supported."
       );
       return;
     }
 
     if (picked.size > MAX_FILE_SIZE) {
-      setError(
-        "That file is larger than 15 MB. Split it and try again."
-      );
+      setError("File must be 15 MB or smaller.");
       return;
     }
 
@@ -211,37 +179,68 @@ const busy =
     }
 
     processingRef.current = true;
-
     setFile(picked);
     setStatus("reading");
 
     try {
-      const text = (
-        await extractFileText(picked, extension)
-      ).trim();
+      let text = "";
+      let visuals: VisualPage[] = [];
 
-      if (!text) {
+      if (extension === "pdf") {
+        text = await extractPdf(picked);
+
+        visuals = await extractPdfVisuals(picked);
+      } else if (extension === "docx") {
+        text = await extractDocx(picked);
+      } else if (extension === "txt") {
+        text = await picked.text();
+      } else {
+        const image = await extractImageVisual(picked);
+
+        visuals = [
+          {
+            pageNumber: 1,
+            mimeType: image.mimeType,
+            dataUrl: image.dataUrl,
+          },
+        ];
+      }
+
+      text = text.trim();
+
+      if (!text && visuals.length === 0) {
         throw new Error(
-          extension === "pdf"
-            ? "No readable text found. Scanned PDFs may require OCR."
-            : "No readable text found in this file."
+          "No readable content found in this file."
         );
       }
 
       setStatus("saving");
 
-const material = await saveMaterial(picked, text);
+      let materialId: string | null = null;
 
-setCharacters(text.length);
-setStatus("ready");
+      // Preserve existing local saving for text materials.
+      // Visual-only storage will be added later.
+      if (text) {
+        const material = await saveMaterial(
+          picked,
+          text
+        );
 
-onReady({
-  text,
-  sourceLabel: picked.name,
-  materialId: material.id,
-});
+        materialId = material.id;
+      }
+
+      setCharacters(text.length);
+      setVisualCount(visuals.length);
+      setStatus("ready");
+
+      onReady({
+        text,
+        sourceLabel: picked.name,
+        materialId,
+        visuals,
+      });
     } catch (err) {
-      console.error("Text extraction failed:", err);
+      console.error("File processing failed:", err);
 
       setStatus("idle");
 
@@ -255,29 +254,19 @@ onReady({
     }
   }
 
-  // ========================================
-  // BROWSE FILE
-  // ========================================
-
   function handlePick(
     event: ChangeEvent<HTMLInputElement>
   ) {
     const picked = event.target.files?.[0];
 
     event.target.value = "";
-
     void processFile(picked);
   }
-
-  // ========================================
-  // DRAG AND DROP
-  // ========================================
 
   function handleDrop(
     event: DragEvent<HTMLDivElement>
   ) {
     event.preventDefault();
-
     setDragging(false);
 
     if (!busy) {
@@ -288,19 +277,12 @@ onReady({
   const activeStep =
     status === "ready"
       ? 2
-      : status === "reading"
+      : status === "reading" || status === "saving"
         ? 1
         : 0;
 
-  // ========================================
-  // UPLOAD PANEL UI
-  // ========================================
-
   return (
     <div className="space-y-4">
-
-      {/* FILE DROP ZONE */}
-
       <div
         onDragOver={(event) => {
           event.preventDefault();
@@ -319,21 +301,17 @@ onReady({
               : "border-border bg-background/40"
         }`}
       >
-        {/* FILE INPUT */}
-
         <input
           ref={inputRef}
           id="material-file"
           type="file"
-          accept=".pdf,.docx,.txt"
+          accept=".pdf,.docx,.txt,.jpg,.jpeg,.png"
           onChange={handlePick}
           className="sr-only"
         />
 
-        {/* UPLOAD ICON */}
-
         <span
-          className={`mx-auto mb-3 grid h-11 w-11 place-items-center rounded-lg border ${
+          className={`mx-auto grid h-11 w-11 place-items-center rounded-lg border ${
             status === "ready"
               ? "border-primary/40 bg-primary/10 text-primary"
               : "border-border bg-card text-muted-foreground"
@@ -342,66 +320,52 @@ onReady({
           {status === "ready" ? (
             <Check className="h-5 w-5" />
           ) : busy ? (
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
             <FileUp className="h-5 w-5" />
           )}
         </span>
 
-        {/* FILE NAME */}
+        <div className="mt-3">
+          {file ? (
+            <p className="flex items-center justify-center gap-2 text-[13.5px] font-medium text-foreground">
+              <FileText className="h-4 w-4 shrink-0" />
+              <span className="truncate">{file.name}</span>
+            </p>
+          ) : (
+            <p className="text-[13.5px] font-medium text-foreground">
+              Drop your file here
+            </p>
+          )}
+        </div>
 
-        {file ? (
-          <p className="flex items-center justify-center gap-2 text-[13.5px] font-medium text-foreground">
-            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-
-            <span className="truncate">
-              {file.name}
-            </span>
-          </p>
-        ) : (
-          <p className="text-[13.5px] font-medium text-foreground">
-            Drop your file here
-          </p>
-        )}
-
-        {/* STATUS MESSAGE */}
-
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-2 text-xs text-muted-foreground">
           {status === "reading"
-            ? "Reading and extracting text from your file…"
-            : status === "ready" && file
-              ? `${formatBytes(file.size)} · ${characters.toLocaleString()} characters extracted`
-              : "PDF, Word (.docx), or TXT · up to 15 MB"}
+            ? "Processing document and visuals..."
+            : status === "saving"
+              ? "Saving extracted content..."
+              : status === "ready" && file
+                ? `${formatBytes(file.size)} · ${characters.toLocaleString()} characters · ${visualCount} visual pages`
+                : "PDF, DOCX, TXT, JPG or PNG · up to 15 MB"}
         </p>
-
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Processed locally · cloud storage not connected yet
-        </p>
-
-        {/* BROWSE BUTTON */}
 
         <div className="mt-4 flex items-center justify-center gap-2">
-
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={busy}
             className="btn btn-secondary btn-sm"
           >
-            {file
-              ? "Choose another file"
-              : "Browse files"}
+            {file ? "Choose another file" : "Browse files"}
           </button>
 
           {status === "ready" && (
             <span className="text-xs text-muted-foreground">
-              Ready for the reviewer
+              File processed
             </span>
           )}
         </div>
       </div>
-
-      {/* PROGRESS INDICATORS */}
 
       {status !== "idle" && (
         <ol className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
@@ -434,13 +398,11 @@ onReady({
                   ) : null}
                 </span>
 
-                <span
-                  className={
-                    done || active
-                      ? "text-foreground/85"
-                      : "text-muted-foreground"
-                  }
-                >
+                <span className={
+                  done || active
+                    ? "text-foreground/85"
+                    : "text-muted-foreground"
+                }>
                   {label}
                 </span>
               </li>
@@ -449,19 +411,15 @@ onReady({
         </ol>
       )}
 
-      {/* ERROR MESSAGE */}
-
       {error && (
         <p
           role="alert"
           className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-[13px] text-destructive"
         >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-
           <span>{error}</span>
         </p>
       )}
-
     </div>
   );
 }

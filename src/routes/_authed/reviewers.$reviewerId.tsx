@@ -1,6 +1,7 @@
-
+﻿import { printReviewerPdf } from "../../lib/printReviewerPdf";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import MathReviewerContent from "../../components/reviewer/MathReviewerContent";
 
 import {
   ArrowLeft,
@@ -11,9 +12,15 @@ import {
   Loader2,
   Pencil,
   Sparkles,
+  Images,
 } from "lucide-react";
 
 import { supabase } from "../../lib/supabaseClient";
+
+import {
+  getReviewerVisuals,
+  type SavedReviewerVisual,
+} from "../../lib/reviewerVisualReader";
 
 // ==========================================
 // TYPES
@@ -51,26 +58,6 @@ function formatDate(date: string | null): string {
   });
 }
 
-function makePdfFilename(title: string): string {
-  const safeTitle = title
-    .trim()
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
-    .replace(/\s+/g, "-")
-    .slice(0, 80);
-
-  return `${safeTitle || "Reviewer"}.pdf`;
-}
-
-function normalizePdfText(text: string): string {
-  return text
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
-    .replace(/[\u2013\u2014]/g, "-")
-    .replace(/\u2022/g, "-")
-    .replace(/\u00A0/g, " ")
-    .replace(/\t/g, "    ");
-}
-
 // ==========================================
 // MAIN COMPONENT
 // ==========================================
@@ -80,11 +67,33 @@ export default function ReviewerPage() {
     reviewerId: string;
   }>();
 
+  // ========================================
+  // REVIEWER STATES
+  // ========================================
+
   const [reviewer, setReviewer] =
     useState<Reviewer | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // ========================================
+  // SAVED DIAGRAM STATES
+  // ========================================
+
+  const [visuals, setVisuals] = useState<
+    SavedReviewerVisual[]
+  >([]);
+
+  const [loadingVisuals, setLoadingVisuals] =
+    useState(true);
+
+  const [visualsError, setVisualsError] =
+    useState("");
+
+  // ========================================
+  // PDF EXPORT STATES
+  // ========================================
 
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -171,8 +180,58 @@ export default function ReviewerPage() {
   }, [reviewerId]);
 
   // ========================================
-  // EXPORT REVIEWER TO PDF
+  // LOAD SAVED REVIEWER DIAGRAMS
   // ========================================
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadVisuals() {
+      setVisuals([]);
+      setVisualsError("");
+      setLoadingVisuals(true);
+
+      try {
+        if (!reviewerId) {
+          throw new Error("Invalid reviewer ID.");
+        }
+
+        const savedImages =
+          await getReviewerVisuals(reviewerId);
+
+        if (!active) return;
+
+        setVisuals(savedImages);
+      } catch (err) {
+        if (!active) return;
+
+        console.error(
+          "Failed to load reviewer diagrams:",
+          err
+        );
+
+        setVisualsError(
+          err instanceof Error
+            ? err.message
+            : "Could not load saved diagrams."
+        );
+      } finally {
+        if (active) {
+          setLoadingVisuals(false);
+        }
+      }
+    }
+
+    void loadVisuals();
+
+    return () => {
+      active = false;
+    };
+  }, [reviewerId]);
+
+  // ==========================================
+  // NEW: EXPORT REVIEWER WITH DIAGRAMS TO PDF
+  // ==========================================
 
   async function exportToPDF() {
     if (!reviewer || exporting) return;
@@ -181,269 +240,44 @@ export default function ReviewerPage() {
     setExportError("");
 
     try {
-      // Load PDF library only when needed.
-      const { jsPDF } = await import("jspdf");
-
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-
-      const pageWidth =
-        pdf.internal.pageSize.getWidth();
-
-      const pageHeight =
-        pdf.internal.pageSize.getHeight();
-
-      const margin = 20;
-      const contentWidth = pageWidth - margin * 2;
-      const bottomLimit = pageHeight - 25;
-
-      let y = 22;
-
-      // ======================================
-      // PAGE BREAK HANDLER
-      // ======================================
-
-      function ensureSpace(height: number) {
-        if (y + height > bottomLimit) {
-          pdf.addPage();
-          y = 22;
-        }
-      }
-
-      // ======================================
-      // WRITE WRAPPED TEXT
-      // ======================================
-
-      function writeText(
-        text: string,
-        options: {
-          fontSize?: number;
-          lineHeight?: number;
-          bold?: boolean;
-          color?: [number, number, number];
-        } = {}
-      ) {
-        const {
-          fontSize = 11,
-          lineHeight = 6,
-          bold = false,
-          color = [40, 40, 40],
-        } = options;
-
-        pdf.setFont(
-          "helvetica",
-          bold ? "bold" : "normal"
-        );
-
-        pdf.setFontSize(fontSize);
-        pdf.setTextColor(...color);
-
-        const normalized = normalizePdfText(text);
-
-        const lines = pdf.splitTextToSize(
-          normalized,
-          contentWidth
-        ) as string[];
-
-        for (const line of lines) {
-          ensureSpace(lineHeight);
-
-          pdf.text(line, margin, y);
-
-          y += lineHeight;
-        }
-      }
-
-      // ======================================
-      // PDF HEADER
-      // ======================================
-
-      writeText("STUDY REVIEWER", {
-        fontSize: 10,
-        lineHeight: 7,
-        bold: true,
-        color: [80, 100, 130],
-      });
-
-      y += 4;
-
-      writeText(reviewer.title, {
-        fontSize: 19,
-        lineHeight: 9,
-        bold: true,
-        color: [25, 35, 50],
-      });
-
-      y += 4;
-
-      if (reviewer.subject?.trim()) {
-        writeText(
-          `Subject: ${reviewer.subject.trim()}`,
-          {
-            fontSize: 10,
-            lineHeight: 6,
-            color: [100, 100, 100],
-          }
-        );
-      }
-
-      writeText(
-        `Updated: ${formatDate(
-          reviewer.updated_date
-        )}`,
-        {
-          fontSize: 9,
-          lineHeight: 6,
-          color: [120, 120, 120],
-        }
+      const contentElement = document.getElementById(
+        "reviewer-pdf-content"
       );
 
-      y += 5;
-
-      ensureSpace(8);
-
-      pdf.setDrawColor(220, 225, 232);
-      pdf.line(
-        margin,
-        y,
-        pageWidth - margin,
-        y
-      );
-
-      y += 10;
-
-      // ======================================
-      // PDF REVIEWER CONTENT
-      // ======================================
-
-      const paragraphs = reviewer.content
-        .replace(/\r\n/g, "\n")
-        .split("\n");
-
-      for (const paragraph of paragraphs) {
-        const text = paragraph.trim();
-
-        // Blank line
-        if (!text) {
-          ensureSpace(3);
-          y += 3;
-          continue;
-        }
-
-        // Markdown-style heading
-        const markdownHeading =
-          text.match(/^#{1,6}\s+(.+)$/);
-
-        if (markdownHeading) {
-          ensureSpace(12);
-          y += 3;
-
-          writeText(markdownHeading[1], {
-            fontSize: 13,
-            lineHeight: 7,
-            bold: true,
-            color: [30, 45, 65],
-          });
-
-          y += 2;
-          continue;
-        }
-
-        // Uppercase section headings
-        const isHeading =
-          text.length <= 75 &&
-          /[A-Z]/.test(text) &&
-          text === text.toUpperCase() &&
-          !text.startsWith("-");
-
-        if (isHeading) {
-          ensureSpace(12);
-          y += 3;
-
-          writeText(text, {
-            fontSize: 12,
-            lineHeight: 7,
-            bold: true,
-            color: [30, 45, 65],
-          });
-
-          y += 2;
-          continue;
-        }
-
-        // Normal content
-        writeText(text, {
-          fontSize: 10.5,
-          lineHeight: 6,
-          color: [45, 45, 45],
-        });
-      }
-
-      // ======================================
-      // PAGE NUMBERS
-      // ======================================
-
-      const totalPages =
-        pdf.getNumberOfPages();
-
-      for (
-        let page = 1;
-        page <= totalPages;
-        page++
-      ) {
-        pdf.setPage(page);
-
-        pdf.setDrawColor(225, 225, 225);
-
-        pdf.line(
-          margin,
-          pageHeight - 19,
-          pageWidth - margin,
-          pageHeight - 19
-        );
-
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(9);
-        pdf.setTextColor(130, 130, 130);
-
-        pdf.text(
-          "StudyRoom",
-          margin,
-          pageHeight - 13
-        );
-
-        pdf.text(
-          `Page ${page} of ${totalPages}`,
-          pageWidth - margin,
-          pageHeight - 13,
-          { align: "right" }
+      if (!contentElement) {
+        throw new Error(
+          "Reviewer content is not ready for PDF export."
         );
       }
 
-      // ======================================
-      // DOWNLOAD PDF
-      // ======================================
-
-      pdf.save(
-        makePdfFilename(reviewer.title)
+      // Generate fresh URLs for private Supabase diagrams.
+      const exportVisuals = await getReviewerVisuals(
+        reviewer.id
       );
+
+      // Export already-rendered Markdown and KaTeX.
+      await printReviewerPdf({
+        title: reviewer.title,
+        subject: reviewer.subject,
+        updatedAt: reviewer.updated_date,
+        contentElement,
+        visuals: exportVisuals,
+      });
     } catch (err) {
       console.error(
-        "Failed to export reviewer:",
+        "Failed to export reviewer PDF:",
         err
       );
 
       setExportError(
-        "Could not generate the PDF. Please try again."
+        err instanceof Error
+          ? err.message
+          : "Could not prepare PDF."
       );
     } finally {
       setExporting(false);
     }
   }
-
   // ========================================
   // LOADING STATE
   // ========================================
@@ -498,8 +332,8 @@ export default function ReviewerPage() {
 
   return (
     <div className="space-y-6">
-
       {/* BACK NAVIGATION */}
+
       <Link
         to="/reviewers"
         className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -514,8 +348,8 @@ export default function ReviewerPage() {
 
       <header className="reviewer-detail-header space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
-
           {/* TITLE AND SUBJECT */}
+
           <div className="min-w-0 flex-1">
             <p className="mb-2 text-xs font-medium text-muted-foreground">
               StudyRoom / My Reviewers
@@ -526,7 +360,6 @@ export default function ReviewerPage() {
             </h1>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
-
               <span className="rounded-full border border-border bg-secondary/40 px-3 py-1 text-xs text-muted-foreground">
                 {reviewer.subject || "General"}
               </span>
@@ -541,9 +374,8 @@ export default function ReviewerPage() {
           </div>
 
           {/* ACTION BUTTONS */}
-          <div className="flex flex-wrap items-center gap-2">
 
-            {/* EDIT REVIEWER */}
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               to={`/reviewers/${encodeURIComponent(
                 reviewer.id
@@ -554,7 +386,6 @@ export default function ReviewerPage() {
               Edit Reviewer
             </Link>
 
-            {/* CONVERT TO PDF */}
             <button
               type="button"
               onClick={() => void exportToPDF()}
@@ -571,12 +402,12 @@ export default function ReviewerPage() {
                 ? "Converting..."
                 : "Convert to PDF"}
             </button>
-
           </div>
         </div>
       </header>
 
       {/* PDF ERROR */}
+
       {exportError && (
         <p
           role="alert"
@@ -592,8 +423,8 @@ export default function ReviewerPage() {
 
       <div className="panel p-4 sm:p-5">
         <div className="flex flex-wrap gap-x-8 gap-y-4">
-
           {/* CREATED DATE */}
+
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
 
@@ -603,14 +434,13 @@ export default function ReviewerPage() {
               </p>
 
               <p className="text-sm text-foreground">
-                {formatDate(
-                  reviewer.created_date
-                )}
+                {formatDate(reviewer.created_date)}
               </p>
             </div>
           </div>
 
           {/* UPDATED DATE */}
+
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
 
@@ -620,14 +450,13 @@ export default function ReviewerPage() {
               </p>
 
               <p className="text-sm text-foreground">
-                {formatDate(
-                  reviewer.updated_date
-                )}
+                {formatDate(reviewer.updated_date)}
               </p>
             </div>
           </div>
 
           {/* SOURCE */}
+
           {reviewer.source_label && (
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
@@ -647,14 +476,86 @@ export default function ReviewerPage() {
       </div>
 
       {/* ======================================
+          SAVED ORIGINAL DIAGRAMS & FIGURES
+      ====================================== */}
+
+      {(loadingVisuals ||
+        visualsError ||
+        visuals.length > 0) && (
+        <section className="panel overflow-hidden">
+          {/* DIAGRAM HEADER */}
+
+          <div className="flex items-center gap-3 border-b border-border px-5 py-4 sm:px-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
+              <Images className="h-5 w-5 text-primary" />
+            </div>
+
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Original Diagrams & Figures
+              </h2>
+
+              <p className="text-xs text-muted-foreground">
+                Visual references saved with your reviewer
+              </p>
+            </div>
+          </div>
+
+          {/* DIAGRAM CONTENT */}
+
+          <div className="space-y-4 p-5 sm:p-6">
+            {loadingVisuals && (
+              <div
+                role="status"
+                className="flex items-center gap-2 py-6 text-sm text-muted-foreground"
+              >
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading saved diagrams...
+              </div>
+            )}
+
+            {!loadingVisuals && visualsError && (
+              <p
+                role="alert"
+                className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+              >
+                {visualsError}
+              </p>
+            )}
+
+            {!loadingVisuals &&
+              visuals.map((visual) => (
+                <figure
+                  key={visual.pageNumber}
+                  className="overflow-hidden rounded-xl border border-border bg-background"
+                >
+                  <div className="flex min-h-32 items-center justify-center p-4">
+                    <img
+                      src={visual.url}
+                      alt={`Original diagram from page ${visual.pageNumber}`}
+                      className="max-h-[500px] w-full object-contain"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </div>
+
+                  <figcaption className="border-t border-border bg-secondary/20 px-4 py-3 text-xs text-muted-foreground">
+                    Figure / Page {visual.pageNumber}
+                  </figcaption>
+                </figure>
+              ))}
+          </div>
+        </section>
+      )}
+
+      {/* ======================================
           REVIEWER CONTENT
       ====================================== */}
 
       <article className="panel overflow-hidden">
-
         {/* CONTENT HEADER */}
-        <div className="flex items-center gap-3 border-b border-border px-5 py-4 sm:px-6">
 
+        <div className="flex items-center gap-3 border-b border-border px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
             <BookOpen className="h-5 w-5 text-primary" />
           </div>
@@ -670,11 +571,10 @@ export default function ReviewerPage() {
           </div>
         </div>
 
-        {/* ACTUAL CONTENT */}
-        <div className="p-5 sm:p-7">
-          <div className="whitespace-pre-wrap break-words text-[14px] leading-7 text-foreground">
-            {reviewer.content}
-          </div>
+        {/* ACTUAL REVIEWER CONTENT */}
+
+        <div id="reviewer-pdf-content" className="p-5 sm:p-7">
+          <MathReviewerContent content={reviewer.content} />
         </div>
       </article>
 
@@ -683,7 +583,6 @@ export default function ReviewerPage() {
       ====================================== */}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-
         <Link
           to="/reviewers"
           className="btn btn-secondary"
@@ -701,7 +600,6 @@ export default function ReviewerPage() {
           <Pencil className="h-4 w-4" />
           Edit Content
         </Link>
-
       </div>
     </div>
   );
