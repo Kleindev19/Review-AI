@@ -1,20 +1,26 @@
-﻿import { printReviewerPdf } from "../../lib/printReviewerPdf";
-import { useEffect, useState } from "react";
+
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import MathReviewerContent from "../../components/reviewer/MathReviewerContent";
 
 import {
   ArrowLeft,
   BookOpen,
   CalendarDays,
-  FileText,
+  CheckCircle2,
+  Download,
   FileDown,
+  FileText,
+  Images,
   Loader2,
   Pencil,
   Sparkles,
-  Images,
+  Trash2,
+  WifiOff,
 } from "lucide-react";
 
+import MathReviewerContent from "../../components/reviewer/MathReviewerContent";
+
+import { printReviewerPdf } from "../../lib/printReviewerPdf";
 import { supabase } from "../../lib/supabaseClient";
 
 import {
@@ -22,40 +28,42 @@ import {
   type SavedReviewerVisual,
 } from "../../lib/reviewerVisualReader";
 
-// ==========================================
-// TYPES
-// ==========================================
-
-type Reviewer = {
-  id: string;
-  title: string;
-  subject: string | null;
-  content: string;
-  source_type: string;
-  source_label: string | null;
-  is_ai_generated: boolean;
-  created_date: string;
-  updated_date: string;
-};
+import {
+  createOfflineVisualUrls,
+  deleteOfflineReviewer,
+  getOfflineReviewer,
+  saveReviewerForOffline,
+  type OfflineReviewerData,
+  type OfflineReviewerRecord,
+} from "../../lib/offlineReviewerStore";
 
 // ==========================================
-// HELPERS
+// TYPES AND HELPERS
 // ==========================================
 
-function formatDate(date: string | null): string {
-  if (!date) return "Unknown date";
+type Reviewer = OfflineReviewerData;
 
-  const parsed = new Date(date);
+function formatDate(value: string | null): string {
+  if (!value) return "Unknown date";
 
-  if (Number.isNaN(parsed.getTime())) {
-    return "Unknown date";
-  }
+  const date = new Date(value);
 
-  return parsed.toLocaleDateString("en-PH", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  return Number.isNaN(date.getTime())
+    ? "Unknown date"
+    : date.toLocaleDateString("en-PH", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+}
+
+function errorMessage(
+  error: unknown,
+  fallback: string
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
 }
 
 // ==========================================
@@ -67,55 +75,156 @@ export default function ReviewerPage() {
     reviewerId: string;
   }>();
 
-  // ========================================
-  // REVIEWER STATES
-  // ========================================
-
   const [reviewer, setReviewer] =
     useState<Reviewer | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [visuals, setVisuals] =
+    useState<SavedReviewerVisual[]>([]);
 
-  // ========================================
-  // SAVED DIAGRAM STATES
-  // ========================================
-
-  const [visuals, setVisuals] = useState<
-    SavedReviewerVisual[]
-  >([]);
+  const [loading, setLoading] =
+    useState(true);
 
   const [loadingVisuals, setLoadingVisuals] =
     useState(true);
 
+  const [error, setError] = useState("");
   const [visualsError, setVisualsError] =
+    useState("");
+
+  // ========================================
+  // OFFLINE STATES
+  // ========================================
+
+  const [usingOffline, setUsingOffline] =
+    useState(false);
+
+  const [offlineSaved, setOfflineSaved] =
+    useState(false);
+
+  const [savingOffline, setSavingOffline] =
+    useState(false);
+
+  const [offlineBusy, setOfflineBusy] =
+    useState(false);
+
+  const [offlineMessage, setOfflineMessage] =
+    useState("");
+
+  const [offlineError, setOfflineError] =
     useState("");
 
   // ========================================
   // PDF EXPORT STATES
   // ========================================
 
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState("");
+  const [exporting, setExporting] =
+    useState(false);
+
+  const [exportError, setExportError] =
+    useState("");
+
+  const reviewerContentRef =
+    useRef<HTMLDivElement>(null);
+
+  const offlineRevokeRef =
+    useRef<() => void>(() => {});
 
   // ========================================
-  // LOAD REVIEWER FROM SUPABASE
+  // LOAD ONLINE OR OFFLINE REVIEWER
   // ========================================
 
   useEffect(() => {
     let active = true;
 
     async function loadReviewer() {
-      setLoading(true);
-      setError("");
+      offlineRevokeRef.current();
+      offlineRevokeRef.current = () => {};
+
       setReviewer(null);
+      setVisuals([]);
+      setLoading(true);
+      setLoadingVisuals(true);
+      setError("");
+      setVisualsError("");
       setExportError("");
+      setOfflineError("");
+      setOfflineMessage("");
+      setUsingOffline(false);
+      setOfflineSaved(false);
+
+      if (!reviewerId) {
+        setError("Invalid reviewer ID.");
+        setLoading(false);
+        setLoadingVisuals(false);
+        return;
+      }
+
+      // ====================================
+      // CHECK LOCAL INDEXEDDB COPY
+      // ====================================
+
+      let local: OfflineReviewerRecord | null =
+        null;
 
       try {
-        if (!reviewerId) {
-          throw new Error("Invalid reviewer ID.");
+        local = await getOfflineReviewer(
+          reviewerId
+        );
+      } catch (storageError) {
+        console.warn(
+          "Offline database unavailable:",
+          storageError
+        );
+      }
+
+      if (!active) return;
+
+      setOfflineSaved(Boolean(local));
+
+      // ====================================
+      // DISPLAY CACHED REVIEWER
+      // ====================================
+
+      function showCached(
+        record: OfflineReviewerRecord
+      ) {
+        const images =
+          createOfflineVisualUrls(record);
+
+        if (!active) {
+          images.revoke();
+          return;
         }
 
+        offlineRevokeRef.current();
+
+        offlineRevokeRef.current =
+          images.revoke;
+
+        setReviewer(record.reviewer);
+        setVisuals(images.visuals);
+
+        setUsingOffline(true);
+        setLoading(false);
+        setLoadingVisuals(false);
+
+        setError("");
+        setVisualsError("");
+      }
+
+      // If browser reports offline,
+      // show cached reviewer immediately.
+
+      if (!navigator.onLine && local) {
+        showCached(local);
+        return;
+      }
+
+      // ====================================
+      // TRY ONLINE SUPABASE FIRST
+      // ====================================
+
+      try {
         const {
           data: { user },
           error: authError,
@@ -123,7 +232,7 @@ export default function ReviewerPage() {
 
         if (authError || !user) {
           throw new Error(
-            "Please log in to view your reviewer."
+            "Could not verify your login online."
           );
         }
 
@@ -140,34 +249,51 @@ export default function ReviewerPage() {
           .maybeSingle();
 
         if (databaseError) {
-          throw new Error(databaseError.message);
+          throw new Error(
+            databaseError.message
+          );
         }
 
         if (!data) {
           throw new Error(
-            "Reviewer not found or you do not have permission to view it."
+            "Reviewer not found or access not permitted."
           );
         }
+
+        const onlineVisuals =
+          await getReviewerVisuals(reviewerId);
 
         if (!active) return;
 
         setReviewer(data as Reviewer);
-      } catch (err) {
+        setVisuals(onlineVisuals);
+
+        setLoading(false);
+        setLoadingVisuals(false);
+      } catch (onlineError) {
         if (!active) return;
 
-        console.error(
-          "Failed to load reviewer:",
-          err
+        console.warn(
+          "Online reviewer load failed:",
+          onlineError
         );
 
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load reviewer."
-        );
-      } finally {
-        if (active) {
+        // ==================================
+        // FALLBACK TO OFFLINE COPY
+        // ==================================
+
+        if (local) {
+          showCached(local);
+        } else {
+          setError(
+            errorMessage(
+              onlineError,
+              "Could not load reviewer. Save it for offline use while connected."
+            )
+          );
+
           setLoading(false);
+          setLoadingVisuals(false);
         }
       }
     }
@@ -176,62 +302,97 @@ export default function ReviewerPage() {
 
     return () => {
       active = false;
+
+      offlineRevokeRef.current();
+
+      offlineRevokeRef.current = () => {};
     };
   }, [reviewerId]);
 
   // ========================================
-  // LOAD SAVED REVIEWER DIAGRAMS
+  // SAVE REVIEWER FOR OFFLINE USE
   // ========================================
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadVisuals() {
-      setVisuals([]);
-      setVisualsError("");
-      setLoadingVisuals(true);
-
-      try {
-        if (!reviewerId) {
-          throw new Error("Invalid reviewer ID.");
-        }
-
-        const savedImages =
-          await getReviewerVisuals(reviewerId);
-
-        if (!active) return;
-
-        setVisuals(savedImages);
-      } catch (err) {
-        if (!active) return;
-
-        console.error(
-          "Failed to load reviewer diagrams:",
-          err
-        );
-
-        setVisualsError(
-          err instanceof Error
-            ? err.message
-            : "Could not load saved diagrams."
-        );
-      } finally {
-        if (active) {
-          setLoadingVisuals(false);
-        }
-      }
+  async function saveOffline() {
+    if (
+      !reviewer ||
+      savingOffline ||
+      usingOffline
+    ) {
+      return;
     }
 
-    void loadVisuals();
+    setSavingOffline(true);
+    setOfflineError("");
+    setOfflineMessage("");
 
-    return () => {
-      active = false;
-    };
-  }, [reviewerId]);
+    try {
+      // Download fresh signed image URLs.
+      // Actual image data goes to IndexedDB.
 
-  // ==========================================
-  // NEW: EXPORT REVIEWER WITH DIAGRAMS TO PDF
-  // ==========================================
+      const freshVisuals =
+        await getReviewerVisuals(
+          reviewer.id
+        );
+
+      await saveReviewerForOffline(
+        reviewer,
+        freshVisuals
+      );
+
+      setOfflineSaved(true);
+
+      setOfflineMessage(
+        `Saved on this device with ${freshVisuals.length} diagram(s). You can open this reviewer offline.`
+      );
+    } catch (saveError) {
+      setOfflineError(
+        errorMessage(
+          saveError,
+          "Could not save reviewer for offline use."
+        )
+      );
+    } finally {
+      setSavingOffline(false);
+    }
+  }
+
+  // ========================================
+  // REMOVE OFFLINE COPY
+  // ========================================
+
+  async function removeOffline() {
+    if (!reviewer || offlineBusy) return;
+
+    setOfflineBusy(true);
+    setOfflineError("");
+    setOfflineMessage("");
+
+    try {
+      await deleteOfflineReviewer(
+        reviewer.id
+      );
+
+      setOfflineSaved(false);
+
+      setOfflineMessage(
+        "Offline copy removed from this device. The online reviewer is unchanged."
+      );
+    } catch (removeError) {
+      setOfflineError(
+        errorMessage(
+          removeError,
+          "Could not remove offline copy."
+        )
+      );
+    } finally {
+      setOfflineBusy(false);
+    }
+  }
+
+  // ========================================
+  // EXPORT PDF
+  // ========================================
 
   async function exportToPDF() {
     if (!reviewer || exporting) return;
@@ -240,46 +401,44 @@ export default function ReviewerPage() {
     setExportError("");
 
     try {
-      const contentElement = document.getElementById(
-        "reviewer-pdf-content"
-      );
-
-      if (!contentElement) {
+      if (!reviewerContentRef.current) {
         throw new Error(
-          "Reviewer content is not ready for PDF export."
+          "Reviewer content is not ready for export."
         );
       }
 
-      // Generate fresh URLs for private Supabase diagrams.
-      const exportVisuals = await getReviewerVisuals(
-        reviewer.id
-      );
+      // Use local diagrams when offline.
+      // Online mode still refreshes signed URLs.
 
-      // Export already-rendered Markdown and KaTeX.
+      const exportVisuals = usingOffline
+        ? visuals
+        : await getReviewerVisuals(
+            reviewer.id
+          );
+
       await printReviewerPdf({
         title: reviewer.title,
         subject: reviewer.subject,
-        updatedAt: reviewer.updated_date,
-        contentElement,
+        updatedAt:
+          reviewer.updated_date,
+        contentElement:
+          reviewerContentRef.current,
         visuals: exportVisuals,
       });
-    } catch (err) {
-      console.error(
-        "Failed to export reviewer PDF:",
-        err
-      );
-
+    } catch (exportFailure) {
       setExportError(
-        err instanceof Error
-          ? err.message
-          : "Could not prepare PDF."
+        errorMessage(
+          exportFailure,
+          "Could not prepare the PDF."
+        )
       );
     } finally {
       setExporting(false);
     }
   }
+
   // ========================================
-  // LOADING STATE
+  // LOADING SCREEN
   // ========================================
 
   if (loading) {
@@ -295,7 +454,7 @@ export default function ReviewerPage() {
   }
 
   // ========================================
-  // NOT FOUND / ERROR
+  // ERROR SCREEN
   // ========================================
 
   if (!reviewer) {
@@ -342,14 +501,10 @@ export default function ReviewerPage() {
         Back to Reviewers
       </Link>
 
-      {/* ======================================
-          REVIEWER HEADER
-      ====================================== */}
+      {/* REVIEWER HEADER */}
 
       <header className="reviewer-detail-header space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          {/* TITLE AND SUBJECT */}
-
           <div className="min-w-0 flex-1">
             <p className="mb-2 text-xs font-medium text-muted-foreground">
               StudyRoom / My Reviewers
@@ -370,25 +525,91 @@ export default function ReviewerPage() {
                   AI Generated
                 </span>
               )}
+
+              {usingOffline && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/40 px-3 py-1 text-xs text-muted-foreground">
+                  <WifiOff className="h-3 w-3" />
+                  Offline copy
+                </span>
+              )}
+
+              {offlineSaved && !usingOffline && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/40 px-3 py-1 text-xs text-muted-foreground">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Saved offline
+                </span>
+              )}
             </div>
           </div>
 
           {/* ACTION BUTTONS */}
 
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              to={`/reviewers/${encodeURIComponent(
-                reviewer.id
-              )}/edit`}
-              className="btn btn-secondary"
-            >
-              <Pencil className="h-4 w-4" />
-              Edit Reviewer
-            </Link>
+            {!usingOffline && (
+              <button
+                type="button"
+                onClick={() =>
+                  void saveOffline()
+                }
+                disabled={
+                  savingOffline ||
+                  loadingVisuals
+                }
+                className="btn btn-secondary disabled:opacity-50"
+              >
+                {savingOffline ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+
+                {savingOffline
+                  ? "Downloading..."
+                  : offlineSaved
+                    ? "Update Offline Copy"
+                    : "Save for Offline"}
+              </button>
+            )}
+
+            {offlineSaved && (
+              <button
+                type="button"
+                onClick={() =>
+                  void removeOffline()
+                }
+                disabled={
+                  offlineBusy ||
+                  savingOffline
+                }
+                className="btn btn-secondary disabled:opacity-50"
+              >
+                {offlineBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+
+                Remove Offline Copy
+              </button>
+            )}
+
+            {!usingOffline && (
+              <Link
+                to={`/reviewers/${encodeURIComponent(
+                  reviewer.id
+                )}/edit`}
+                className="btn btn-secondary"
+              >
+                <Pencil className="h-4 w-4" />
+                Edit Reviewer
+              </Link>
+            )}
 
             <button
               type="button"
-              onClick={() => void exportToPDF()}
+              onClick={() =>
+                void exportToPDF()
+              }
               disabled={exporting}
               className="btn btn-primary disabled:opacity-50"
             >
@@ -399,12 +620,35 @@ export default function ReviewerPage() {
               )}
 
               {exporting
-                ? "Converting..."
+                ? "Preparing PDF..."
                 : "Convert to PDF"}
             </button>
           </div>
         </div>
       </header>
+
+      {/* OFFLINE STATUS */}
+
+      {(offlineMessage ||
+        offlineError ||
+        usingOffline) && (
+        <div
+          role={
+            offlineError
+              ? "alert"
+              : "status"
+          }
+          className={`rounded-lg border p-3 text-sm ${
+            offlineError
+              ? "border-destructive/30 bg-destructive/10 text-destructive"
+              : "border-border bg-secondary/20 text-foreground"
+          }`}
+        >
+          {offlineError ||
+            offlineMessage ||
+            "Showing the downloaded copy. Changes require internet."}
+        </div>
+      )}
 
       {/* PDF ERROR */}
 
@@ -417,14 +661,10 @@ export default function ReviewerPage() {
         </p>
       )}
 
-      {/* ======================================
-          REVIEWER INFORMATION
-      ====================================== */}
+      {/* REVIEWER INFORMATION */}
 
       <div className="panel p-4 sm:p-5">
         <div className="flex flex-wrap gap-x-8 gap-y-4">
-          {/* CREATED DATE */}
-
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
 
@@ -434,12 +674,12 @@ export default function ReviewerPage() {
               </p>
 
               <p className="text-sm text-foreground">
-                {formatDate(reviewer.created_date)}
+                {formatDate(
+                  reviewer.created_date
+                )}
               </p>
             </div>
           </div>
-
-          {/* UPDATED DATE */}
 
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
@@ -450,12 +690,12 @@ export default function ReviewerPage() {
               </p>
 
               <p className="text-sm text-foreground">
-                {formatDate(reviewer.updated_date)}
+                {formatDate(
+                  reviewer.updated_date
+                )}
               </p>
             </div>
           </div>
-
-          {/* SOURCE */}
 
           {reviewer.source_label && (
             <div className="flex items-center gap-2">
@@ -475,16 +715,12 @@ export default function ReviewerPage() {
         </div>
       </div>
 
-      {/* ======================================
-          SAVED ORIGINAL DIAGRAMS & FIGURES
-      ====================================== */}
+      {/* ORIGINAL DIAGRAMS AND FIGURES */}
 
       {(loadingVisuals ||
         visualsError ||
         visuals.length > 0) && (
         <section className="panel overflow-hidden">
-          {/* DIAGRAM HEADER */}
-
           <div className="flex items-center gap-3 border-b border-border px-5 py-4 sm:px-6">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
               <Images className="h-5 w-5 text-primary" />
@@ -492,7 +728,7 @@ export default function ReviewerPage() {
 
             <div>
               <h2 className="text-sm font-semibold text-foreground">
-                Original Diagrams & Figures
+                Original Diagrams &amp; Figures
               </h2>
 
               <p className="text-xs text-muted-foreground">
@@ -500,8 +736,6 @@ export default function ReviewerPage() {
               </p>
             </div>
           </div>
-
-          {/* DIAGRAM CONTENT */}
 
           <div className="space-y-4 p-5 sm:p-6">
             {loadingVisuals && (
@@ -514,14 +748,15 @@ export default function ReviewerPage() {
               </div>
             )}
 
-            {!loadingVisuals && visualsError && (
-              <p
-                role="alert"
-                className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
-              >
-                {visualsError}
-              </p>
-            )}
+            {!loadingVisuals &&
+              visualsError && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  {visualsError}
+                </p>
+              )}
 
             {!loadingVisuals &&
               visuals.map((visual) => (
@@ -548,13 +783,9 @@ export default function ReviewerPage() {
         </section>
       )}
 
-      {/* ======================================
-          REVIEWER CONTENT
-      ====================================== */}
+      {/* REVIEWER CONTENT */}
 
       <article className="panel overflow-hidden">
-        {/* CONTENT HEADER */}
-
         <div className="flex items-center gap-3 border-b border-border px-5 py-4 sm:px-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
             <BookOpen className="h-5 w-5 text-primary" />
@@ -571,16 +802,17 @@ export default function ReviewerPage() {
           </div>
         </div>
 
-        {/* ACTUAL REVIEWER CONTENT */}
-
-        <div id="reviewer-pdf-content" className="p-5 sm:p-7">
-          <MathReviewerContent content={reviewer.content} />
+        <div
+          ref={reviewerContentRef}
+          className="p-5 sm:p-7"
+        >
+          <MathReviewerContent
+            content={reviewer.content}
+          />
         </div>
       </article>
 
-      {/* ======================================
-          BOTTOM NAVIGATION
-      ====================================== */}
+      {/* BOTTOM NAVIGATION */}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
@@ -591,15 +823,17 @@ export default function ReviewerPage() {
           Back to Library
         </Link>
 
-        <Link
-          to={`/reviewers/${encodeURIComponent(
-            reviewer.id
-          )}/edit`}
-          className="btn btn-primary"
-        >
-          <Pencil className="h-4 w-4" />
-          Edit Content
-        </Link>
+        {!usingOffline && (
+          <Link
+            to={`/reviewers/${encodeURIComponent(
+              reviewer.id
+            )}/edit`}
+            className="btn btn-primary"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit Content
+          </Link>
+        )}
       </div>
     </div>
   );

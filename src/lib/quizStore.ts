@@ -1,12 +1,25 @@
 
 import { supabase } from "./supabaseClient";
 
+import {
+  getOfflinePractice,
+  listOfflinePractice,
+  removeOfflinePractice,
+  saveOfflinePractice,
+} from "./offlinePracticeStore";
+
+// ==========================================
+// TYPES
+// ==========================================
+
 export type QuestionType =
   | "multiple_choice"
   | "true_false"
   | "identification";
 
-export type QuizType = QuestionType | "mixed";
+export type QuizType =
+  | QuestionType
+  | "mixed";
 
 export type QuizQuestion = {
   id: string;
@@ -61,6 +74,10 @@ export type CreateQuizInput = {
   questions?: QuizQuestion[];
 };
 
+// ==========================================
+// DATABASE TYPES
+// ==========================================
+
 type QuizRow = {
   id: string;
   title: string;
@@ -109,13 +126,15 @@ async function getUserId(): Promise<string> {
 }
 
 // ==========================================
-// DATABASE ROW CONVERSION
+// QUESTION VALIDATION
 // ==========================================
 
 function normalizeQuestions(
   value: unknown
 ): QuizQuestion[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
 
   return value
     .filter(
@@ -130,19 +149,33 @@ function normalizeQuestions(
         typeof question.id === "string"
           ? question.id
           : crypto.randomUUID(),
+
       position,
+
       type: question.type,
+
       question: question.question,
-      options: Array.isArray(question.options)
+
+      options: Array.isArray(
+        question.options
+      )
         ? question.options
         : [],
+
       answer: question.answer,
-      explanation: question.explanation ?? "",
+
+      explanation:
+        question.explanation ?? "",
     }));
 }
 
+// ==========================================
+// CONVERT DATABASE ROW TO QUIZ
+// ==========================================
+
 function toQuiz(row: QuizRow): Quiz {
-  const questions = normalizeQuestions(row.questions);
+  const questions =
+    normalizeQuestions(row.questions);
 
   return {
     id: row.id,
@@ -151,14 +184,21 @@ function toQuiz(row: QuizRow): Quiz {
     origin: row.origin,
     question_type: row.question_type,
     question_count: questions.length,
-    source_label: row.source_label ?? "",
+    source_label:
+      row.source_label ?? "",
     questions,
     created_date: row.created_date,
     updated_date: row.updated_date,
   };
 }
 
-function toAttempt(row: AttemptRow): QuizAttempt {
+// ==========================================
+// CONVERT DATABASE ROW TO ATTEMPT
+// ==========================================
+
+function toAttempt(
+  row: AttemptRow
+): QuizAttempt {
   return {
     id: row.id,
     quiz_id: row.quiz_id,
@@ -166,7 +206,9 @@ function toAttempt(row: AttemptRow): QuizAttempt {
     user_name: row.user_name,
     score: row.score,
     total: row.total,
-    percentage: Number(row.percentage),
+    percentage: Number(
+      row.percentage
+    ),
     answers: Array.isArray(row.answers)
       ? (row.answers as QuizAnswer[])
       : [],
@@ -175,45 +217,61 @@ function toAttempt(row: AttemptRow): QuizAttempt {
 }
 
 // ==========================================
-// CLOUD QUIZ LIBRARY
+// LIST CLOUD QUIZZES
 // ==========================================
 
-export async function listCloudQuizzes(): Promise<Quiz[]> {
+export async function listCloudQuizzes():
+  Promise<Quiz[]> {
   const userId = await getUserId();
 
-  const { data, error } = await supabase
-    .from("quizzes")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_date", { ascending: false });
+  const { data, error } =
+    await supabase
+      .from("quizzes")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_date", {
+        ascending: false,
+      });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (data ?? []).map((row) =>
-    toQuiz(row as QuizRow)
+  return (data ?? []).map(
+    (row: QuizRow) =>
+      toQuiz(row)
   );
 }
+
+// ==========================================
+// GET CLOUD QUIZ
+// ==========================================
 
 export async function getCloudQuiz(
   id: string
 ): Promise<Quiz | null> {
   const userId = await getUserId();
 
-  const { data, error } = await supabase
-    .from("quizzes")
-    .select("*")
-    .eq("id", id)
-    .eq("user_id", userId)
-    .maybeSingle();
+  const { data, error } =
+    await supabase
+      .from("quizzes")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .maybeSingle();
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return data ? toQuiz(data as QuizRow) : null;
+  return data
+    ? toQuiz(data as QuizRow)
+    : null;
 }
+
+// ==========================================
+// CREATE CLOUD QUIZ
+// ==========================================
 
 export async function createCloudQuiz(
   input: CreateQuizInput
@@ -221,33 +279,45 @@ export async function createCloudQuiz(
   const userId = await getUserId();
 
   if (!input.title.trim()) {
-    throw new Error("Quiz title is required.");
+    throw new Error(
+      "Quiz title is required."
+    );
   }
 
-  const questions = normalizeQuestions(
-    input.questions ?? []
-  );
+  const questions =
+    normalizeQuestions(
+      input.questions ?? []
+    );
 
-  const { data, error } = await supabase
-    .from("quizzes")
-    .insert({
-      user_id: userId,
-      title: input.title.trim(),
-      subject: input.subject.trim(),
-      origin: input.origin,
-      question_type: input.question_type,
-      source_label: input.source_label ?? "",
-      questions,
-    })
-    .select("*")
-    .single();
+  const { data, error } =
+    await supabase
+      .from("quizzes")
+      .insert({
+        user_id: userId,
+        title: input.title.trim(),
+        subject: input.subject.trim(),
+        origin: input.origin,
+        question_type:
+          input.question_type,
+        source_label:
+          input.source_label ?? "",
+        questions,
+      })
+      .select("*")
+      .single();
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return toQuiz(data as QuizRow);
+  return toQuiz(
+    data as QuizRow
+  );
 }
+
+// ==========================================
+// UPDATE CLOUD QUIZ
+// ==========================================
 
 export async function updateCloudQuiz(
   updated: Quiz
@@ -255,56 +325,70 @@ export async function updateCloudQuiz(
   const userId = await getUserId();
 
   if (!updated.title.trim()) {
-    throw new Error("Quiz title is required.");
+    throw new Error(
+      "Quiz title is required."
+    );
   }
 
-  const questions = normalizeQuestions(
-    updated.questions
-  );
+  const questions =
+    normalizeQuestions(
+      updated.questions
+    );
 
-  const { data, error } = await supabase
-    .from("quizzes")
-    .update({
-      title: updated.title.trim(),
-      subject: updated.subject.trim(),
-      question_type: updated.question_type,
-      source_label: updated.source_label,
-      questions,
-      updated_date: new Date().toISOString(),
-    })
-    .eq("id", updated.id)
-    .eq("user_id", userId)
-    .select("*")
-    .maybeSingle();
+  const { data, error } =
+    await supabase
+      .from("quizzes")
+      .update({
+        title: updated.title.trim(),
+        subject: updated.subject.trim(),
+        question_type:
+          updated.question_type,
+        source_label:
+          updated.source_label,
+        questions,
+        updated_date:
+          new Date().toISOString(),
+      })
+      .eq("id", updated.id)
+      .eq("user_id", userId)
+      .select("*")
+      .maybeSingle();
 
   if (error) {
     throw new Error(error.message);
   }
 
   if (!data) {
-    throw new Error("Quiz not found.");
+    throw new Error(
+      "Quiz not found."
+    );
   }
 
   return toQuiz(data as QuizRow);
 }
+
+// ==========================================
+// DELETE CLOUD QUIZ
+// ==========================================
 
 export async function deleteCloudQuiz(
   id: string
 ): Promise<void> {
   const userId = await getUserId();
 
-  const { error } = await supabase
-    .from("quizzes")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", userId);
+  const { error } =
+    await supabase
+      .from("quizzes")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  // Related quiz attempts are removed by
-  // the database's ON DELETE CASCADE.
+  // Related attempts are removed
+  // by database ON DELETE CASCADE.
 }
 
 // ==========================================
@@ -322,73 +406,103 @@ export async function listCloudQuizAttempts(
     .eq("user_id", userId);
 
   if (quizId) {
-    query = query.eq("quiz_id", quizId);
+    query = query.eq(
+      "quiz_id",
+      quizId
+    );
   }
 
-  const { data, error } = await query.order(
-    "created_date",
-    { ascending: false }
-  );
+  const { data, error } =
+    await query.order(
+      "created_date",
+      { ascending: false }
+    );
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (data ?? []).map((row) =>
-    toAttempt(row as AttemptRow)
+  return (data ?? []).map(
+    (row: AttemptRow) =>
+      toAttempt(row)
   );
 }
+
+// ==========================================
+// SAVE CLOUD QUIZ ATTEMPT
+// ==========================================
 
 export async function saveCloudQuizAttempt(
   attempt: QuizAttempt
 ): Promise<QuizAttempt> {
   const userId = await getUserId();
 
-  const { data, error } = await supabase
-    .from("quiz_attempts")
-    .insert({
-      id: attempt.id,
-      user_id: userId,
-      quiz_id: attempt.quiz_id,
-      quiz_title: attempt.quiz_title,
-      user_name: attempt.user_name,
-      score: attempt.score,
-      total: attempt.total,
-      percentage: attempt.percentage,
-      answers: attempt.answers,
-    })
-    .select("*")
-    .single();
+  const { data, error } =
+    await supabase
+      .from("quiz_attempts")
+      .insert({
+        id: attempt.id,
+        user_id: userId,
+        quiz_id: attempt.quiz_id,
+        quiz_title:
+          attempt.quiz_title,
+        user_name:
+          attempt.user_name,
+        score: attempt.score,
+        total: attempt.total,
+        percentage:
+          attempt.percentage,
+        answers: attempt.answers,
+      })
+      .select("*")
+      .single();
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return toAttempt(data as AttemptRow);
+  return toAttempt(
+    data as AttemptRow
+  );
 }
 
 // ==========================================
 // LEGACY LOCAL STORAGE
-// Preserved for compatibility with older pages.
-// New quiz pages must use cloud functions.
 // ==========================================
 
-const QUIZZES_KEY = "studyroom.quizzes.v1";
-const ATTEMPTS_KEY = "studyroom.quizAttempts.v1";
+const QUIZZES_KEY =
+  "studyroom.quizzes.v1";
 
-function readArray<T>(key: string): T[] {
-  const stored = localStorage.getItem(key);
+const ATTEMPTS_KEY =
+  "studyroom.quizAttempts.v1";
+
+// ==========================================
+// READ LOCAL ARRAY
+// ==========================================
+
+function readArray<T>(
+  key: string
+): T[] {
+  const stored =
+    localStorage.getItem(key);
 
   if (!stored) return [];
 
-  const parsed: unknown = JSON.parse(stored);
+  const parsed: unknown =
+    JSON.parse(stored);
 
   if (!Array.isArray(parsed)) {
-    throw new Error(`Invalid local storage: ${key}`);
+    throw new Error(
+      `Invalid local storage: ${key}`
+    );
   }
 
   return parsed as T[];
 }
+
+// ==========================================
+// WRITE LOCAL ARRAY
+// ==========================================
 
 function writeArray<T>(
   key: string,
@@ -400,76 +514,119 @@ function writeArray<T>(
   );
 }
 
+// ==========================================
+// LIST LOCAL QUIZZES
+// ==========================================
+
 export function listQuizzes(): Quiz[] {
-  return readArray<Quiz>(QUIZZES_KEY).sort(
+  return readArray<Quiz>(
+    QUIZZES_KEY
+  ).sort(
     (a, b) =>
       new Date(b.created_date).getTime() -
       new Date(a.created_date).getTime()
   );
 }
 
-export function getQuiz(id: string): Quiz | null {
+// ==========================================
+// GET LOCAL QUIZ
+// ==========================================
+
+export function getQuiz(
+  id: string
+): Quiz | null {
   return (
-    listQuizzes().find((quiz) => quiz.id === id) ??
-    null
+    listQuizzes().find(
+      (quiz) => quiz.id === id
+    ) ?? null
   );
 }
+
+// ==========================================
+// CREATE LOCAL QUIZ
+// ==========================================
 
 export function createQuiz(
   input: CreateQuizInput
 ): Quiz {
   if (!input.title.trim()) {
-    throw new Error("Quiz title is required.");
+    throw new Error(
+      "Quiz title is required."
+    );
   }
 
-  const now = new Date().toISOString();
-  const questions = normalizeQuestions(
-    input.questions ?? []
-  );
+  const now =
+    new Date().toISOString();
+
+  const questions =
+    normalizeQuestions(
+      input.questions ?? []
+    );
 
   const quiz: Quiz = {
     id: crypto.randomUUID(),
     title: input.title.trim(),
     subject: input.subject.trim(),
     origin: input.origin,
-    question_type: input.question_type,
-    question_count: questions.length,
-    source_label: input.source_label ?? "",
+    question_type:
+      input.question_type,
+    question_count:
+      questions.length,
+    source_label:
+      input.source_label ?? "",
     questions,
     created_date: now,
     updated_date: now,
   };
 
-  writeArray(QUIZZES_KEY, [
-    quiz,
-    ...listQuizzes(),
-  ]);
+  writeArray(
+    QUIZZES_KEY,
+    [
+      quiz,
+      ...listQuizzes(),
+    ]
+  );
 
   return quiz;
 }
 
-export function updateQuiz(updated: Quiz): void {
-  const existing = listQuizzes();
+// ==========================================
+// UPDATE LOCAL QUIZ
+// ==========================================
+
+export function updateQuiz(
+  updated: Quiz
+): void {
+  const existing =
+    listQuizzes();
 
   if (
     !existing.some(
-      (quiz) => quiz.id === updated.id
+      (quiz) =>
+        quiz.id === updated.id
     )
   ) {
-    throw new Error("Quiz not found.");
+    throw new Error(
+      "Quiz not found."
+    );
   }
 
   writeArray(
     QUIZZES_KEY,
+
     existing.map((quiz) =>
       quiz.id === updated.id
         ? {
             ...updated,
-            questions: normalizeQuestions(
-              updated.questions
-            ),
+
+            questions:
+              normalizeQuestions(
+                updated.questions
+              ),
+
             question_count:
               updated.questions.length,
+
             updated_date:
               new Date().toISOString(),
           }
@@ -478,23 +635,36 @@ export function updateQuiz(updated: Quiz): void {
   );
 }
 
-export function deleteQuiz(id: string): void {
+// ==========================================
+// DELETE LOCAL QUIZ
+// ==========================================
+
+export function deleteQuiz(
+  id: string
+): void {
   writeArray(
     QUIZZES_KEY,
     listQuizzes().filter(
-      (quiz) => quiz.id !== id
+      (quiz) =>
+        quiz.id !== id
     )
   );
 
   writeArray(
     ATTEMPTS_KEY,
     listQuizAttempts().filter(
-      (attempt) => attempt.quiz_id !== id
+      (attempt) =>
+        attempt.quiz_id !== id
     )
   );
 }
 
-export function listQuizAttempts(): QuizAttempt[] {
+// ==========================================
+// LIST LOCAL QUIZ ATTEMPTS
+// ==========================================
+
+export function listQuizAttempts():
+  QuizAttempt[] {
   return readArray<QuizAttempt>(
     ATTEMPTS_KEY
   ).sort(
@@ -504,25 +674,173 @@ export function listQuizAttempts(): QuizAttempt[] {
   );
 }
 
+// ==========================================
+// GET LOCAL QUIZ ATTEMPT
+// ==========================================
+
 export function getQuizAttempt(
   id: string
 ): QuizAttempt | null {
   return (
     listQuizAttempts().find(
-      (attempt) => attempt.id === id
+      (attempt) =>
+        attempt.id === id
     ) ?? null
   );
 }
 
+// ==========================================
+// SAVE LOCAL QUIZ ATTEMPT
+// ==========================================
+
 export function saveQuizAttempt(
   attempt: QuizAttempt
 ): void {
-  const existing = listQuizAttempts();
+  const existing =
+    listQuizAttempts();
 
-  writeArray(ATTEMPTS_KEY, [
-    attempt,
-    ...existing.filter(
-      (item) => item.id !== attempt.id
-    ),
-  ]);
+  writeArray(
+    ATTEMPTS_KEY,
+    [
+      attempt,
+
+      ...existing.filter(
+        (item) =>
+          item.id !== attempt.id
+      ),
+    ]
+  );
+}
+
+// ==========================================
+// NEW: SAVE QUIZ FOR OFFLINE
+// ==========================================
+
+export async function saveQuizForOffline(
+  quiz: Quiz
+): Promise<void> {
+  await saveOfflinePractice(
+    "quiz",
+    {
+      ...quiz,
+      question_count:
+        quiz.questions.length,
+    }
+  );
+}
+
+// ==========================================
+// NEW: GET OFFLINE QUIZ
+// ==========================================
+
+export async function getOfflineQuiz(
+  id: string
+): Promise<Quiz | null> {
+  return getOfflinePractice<Quiz>(
+    "quiz",
+    id
+  );
+}
+
+// ==========================================
+// NEW: LIST OFFLINE QUIZZES
+// ==========================================
+
+export async function listOfflineQuizzes():
+  Promise<Quiz[]> {
+  const records =
+    await listOfflinePractice<Quiz>(
+      "quiz"
+    );
+
+  return records.map(
+    (record) =>
+      record.payload
+  );
+}
+
+// ==========================================
+// NEW: REMOVE OFFLINE QUIZ
+// ==========================================
+
+export async function removeOfflineQuiz(
+  id: string
+): Promise<void> {
+  await removeOfflinePractice(
+    "quiz",
+    id
+  );
+}
+
+// ==========================================
+// NEW: SAVE OFFLINE QUIZ ATTEMPT
+// ==========================================
+
+// Stores quiz score and answers locally.
+// No Gemini or Supabase request required.
+
+export async function saveOfflineQuizAttempt(
+  attempt: QuizAttempt
+): Promise<void> {
+  await saveOfflinePractice(
+    "quiz-attempt",
+    attempt
+  );
+}
+
+// ==========================================
+// NEW: GET OFFLINE QUIZ ATTEMPT
+// ==========================================
+
+export async function getOfflineQuizAttempt(
+  id: string
+): Promise<QuizAttempt | null> {
+  return getOfflinePractice<
+    QuizAttempt
+  >(
+    "quiz-attempt",
+    id
+  );
+}
+
+// ==========================================
+// NEW: LIST OFFLINE QUIZ ATTEMPTS
+// ==========================================
+
+export async function listOfflineQuizAttempts(
+  quizId?: string
+): Promise<QuizAttempt[]> {
+  const records =
+    await listOfflinePractice<
+      QuizAttempt
+    >("quiz-attempt");
+
+  return records
+    .map(
+      (record) =>
+        record.payload
+    )
+    .filter(
+      (attempt) =>
+        !quizId ||
+        attempt.quiz_id === quizId
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.created_date).getTime() -
+        new Date(a.created_date).getTime()
+    );
+}
+
+// ==========================================
+// NEW: REMOVE OFFLINE QUIZ ATTEMPT
+// ==========================================
+
+export async function removeOfflineQuizAttempt(
+  id: string
+): Promise<void> {
+  await removeOfflinePractice(
+    "quiz-attempt",
+    id
+  );
 }

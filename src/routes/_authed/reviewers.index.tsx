@@ -13,15 +13,24 @@ import {
 
 import {
   BookOpen,
+  CheckCircle2,
+  Download,
   Loader2,
   Pencil,
   RefreshCw,
   Search,
   Sparkles,
   Trash2,
+  WifiOff,
 } from "lucide-react";
 
 import { supabase } from "../../lib/supabaseClient";
+
+import {
+  deleteOfflineReviewer,
+  getAllOfflineReviewers,
+  type OfflineReviewerRecord,
+} from "../../lib/offlineReviewerStore";
 
 // ==========================================
 // TYPES
@@ -41,11 +50,24 @@ type Reviewer = {
   updated_date: string;
 };
 
+type Tab = "online" | "downloaded";
+
+type ReviewerListItem = {
+  id: string;
+  title: string;
+  subject: string | null;
+  content: string | null;
+  is_ai_generated: boolean;
+  updated_date: string;
+};
+
 // ==========================================
 // HELPERS
 // ==========================================
 
-function formatDate(date?: string | null): string {
+function formatDate(
+  date?: string | null
+): string {
   if (!date) return "Unknown date";
 
   const parsed = new Date(date);
@@ -54,11 +76,23 @@ function formatDate(date?: string | null): string {
     return "Unknown date";
   }
 
-  return parsed.toLocaleDateString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return parsed.toLocaleDateString(
+    "en-PH",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }
+  );
+}
+
+function errorMessage(
+  error: unknown,
+  fallback: string
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
 }
 
 // ==========================================
@@ -69,44 +103,135 @@ export default function ReviewersPage() {
   const [searchParams, setSearchParams] =
     useSearchParams();
 
+  const query =
+    searchParams.get("q") ?? "";
+
+  // ========================================
+  // LIBRARY TABS
+  // ========================================
+
+  const [tab, setTab] = useState<Tab>(
+    () =>
+      typeof navigator !== "undefined" &&
+      !navigator.onLine
+        ? "downloaded"
+        : "online"
+  );
+
+  const [isOnline, setIsOnline] =
+    useState(() =>
+      typeof navigator === "undefined"
+        ? true
+        : navigator.onLine
+    );
+
+  // ========================================
   // DATABASE DATA
+  // ========================================
+
   const [reviewers, setReviewers] =
     useState<Reviewer[]>([]);
 
-  // FILTERS
-  const [subject, setSubject] = useState("All");
+  const [downloaded, setDownloaded] =
+    useState<OfflineReviewerRecord[]>([]);
 
-  // PAGE STATES
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  // ========================================
+  // FILTERS
+  // ========================================
+
+  const [subject, setSubject] =
+    useState("All");
+
+  // ========================================
+  // LOADING AND ERROR STATES
+  // ========================================
+
+  const [loadingOnline, setLoadingOnline] =
+    useState(true);
+
+  const [
+    loadingDownloaded,
+    setLoadingDownloaded,
+  ] = useState(true);
+
+  const [onlineError, setOnlineError] =
+    useState("");
+
+  const [offlineError, setOfflineError] =
+    useState("");
+
+  const [actionError, setActionError] =
+    useState("");
 
   const [deletingId, setDeletingId] =
     useState<string | null>(null);
 
-  const query = searchParams.get("q") ?? "";
+  const [
+    removingLocalId,
+    setRemovingLocalId,
+  ] = useState<string | null>(null);
 
   // ========================================
-  // LOAD REVIEWERS
+  // LOAD DOWNLOADED REVIEWERS
   // ========================================
 
-  const loadReviewers = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const loadDownloaded =
+    useCallback(async () => {
+      setLoadingDownloaded(true);
+      setOfflineError("");
 
-    try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
+      try {
+        const records =
+          await getAllOfflineReviewers();
 
-      if (authError || !user) {
-        throw new Error(
-          "Please log in to view your reviewers."
+        setDownloaded(records);
+      } catch (error) {
+        setOfflineError(
+          errorMessage(
+            error,
+            "Unable to load downloaded reviewers."
+          )
         );
+      } finally {
+        setLoadingDownloaded(false);
+      }
+    }, []);
+
+  // ========================================
+  // LOAD ONLINE REVIEWERS
+  // ========================================
+
+  const loadReviewers =
+    useCallback(async () => {
+      setLoadingOnline(true);
+      setOnlineError("");
+
+      if (!navigator.onLine) {
+        setOnlineError(
+          "You're offline. Open the Downloaded tab to read saved reviewers."
+        );
+
+        setTab("downloaded");
+        setLoadingOnline(false);
+        return;
       }
 
-      const { data, error: databaseError } =
-        await supabase
+      try {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (authError || !user) {
+          throw new Error(
+            "Please log in to view your reviewers."
+          );
+        }
+
+        const {
+          data,
+          error: databaseError,
+        } = await supabase
           .from("reviewers")
           .select("*")
           .eq("user_id", user.id)
@@ -114,33 +239,79 @@ export default function ReviewersPage() {
             ascending: false,
           });
 
-      if (databaseError) {
-        throw new Error(databaseError.message);
+        if (databaseError) {
+          throw new Error(
+            databaseError.message
+          );
+        }
+
+        setReviewers(
+          (data ?? []) as Reviewer[]
+        );
+      } catch (error) {
+        console.error(
+          "Failed to load online reviewers:",
+          error
+        );
+
+        setOnlineError(
+          errorMessage(
+            error,
+            "Unable to load reviewers."
+          )
+        );
+
+        setTab("downloaded");
+      } finally {
+        setLoadingOnline(false);
       }
-
-      setReviewers((data ?? []) as Reviewer[]);
-    } catch (err) {
-      console.error(
-        "Failed to load reviewers:",
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load reviewers."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    }, []);
 
   // ========================================
   // INITIAL LOAD
   // ========================================
 
   useEffect(() => {
+    void loadDownloaded();
     void loadReviewers();
+  }, [loadDownloaded, loadReviewers]);
+
+  // ========================================
+  // NETWORK STATUS LISTENERS
+  // ========================================
+
+  useEffect(() => {
+    function handleOnline() {
+      setIsOnline(true);
+      void loadReviewers();
+    }
+
+    function handleOffline() {
+      setIsOnline(false);
+      setTab("downloaded");
+    }
+
+    window.addEventListener(
+      "online",
+      handleOnline
+    );
+
+    window.addEventListener(
+      "offline",
+      handleOffline
+    );
+
+    return () => {
+      window.removeEventListener(
+        "online",
+        handleOnline
+      );
+
+      window.removeEventListener(
+        "offline",
+        handleOffline
+      );
+    };
   }, [loadReviewers]);
 
   // ========================================
@@ -164,6 +335,46 @@ export default function ReviewersPage() {
   }
 
   // ========================================
+  // DOWNLOADED IDS
+  // ========================================
+
+  const downloadedIds = useMemo(
+    () =>
+      new Set(
+        downloaded.map(
+          (record) => record.id
+        )
+      ),
+    [downloaded]
+  );
+
+  const savedAtById = useMemo(
+    () =>
+      new Map(
+        downloaded.map((record) => [
+          record.id,
+          record.savedAt,
+        ])
+      ),
+    [downloaded]
+  );
+
+  // ========================================
+  // ACTIVE REVIEWER COLLECTION
+  // ========================================
+
+  const activeReviewers:
+    ReviewerListItem[] = useMemo(
+    () =>
+      tab === "downloaded"
+        ? downloaded.map(
+            (record) => record.reviewer
+          )
+        : reviewers,
+    [tab, downloaded, reviewers]
+  );
+
+  // ========================================
   // SUBJECT FILTERS
   // ========================================
 
@@ -171,17 +382,18 @@ export default function ReviewersPage() {
     return [
       "All",
       ...new Set(
-        reviewers
+        activeReviewers
           .map(
             (reviewer) =>
-              reviewer.subject || "General"
+              reviewer.subject ||
+              "General"
           )
           .filter(
             (value) => value !== "All"
           )
       ),
     ];
-  }, [reviewers]);
+  }, [activeReviewers]);
 
   // ========================================
   // FILTER REVIEWERS
@@ -192,37 +404,120 @@ export default function ReviewersPage() {
       .trim()
       .toLowerCase();
 
-    return reviewers.filter((reviewer) => {
-      const reviewerSubject =
-        reviewer.subject || "General";
+    return activeReviewers.filter(
+      (reviewer) => {
+        const reviewerSubject =
+          reviewer.subject || "General";
 
-      const matchesSubject =
-        subject === "All" ||
-        reviewerSubject === subject;
+        const matchesSubject =
+          subject === "All" ||
+          reviewerSubject === subject;
 
-      const searchableText = [
-        reviewer.title,
-        reviewer.subject,
-        reviewer.content,
-      ]
-        .map((value) => String(value ?? ""))
-        .join(" ")
-        .toLowerCase();
+        const searchableText = [
+          reviewer.title,
+          reviewer.subject,
+          reviewer.content,
+        ]
+          .map((value) =>
+            String(value ?? "")
+          )
+          .join(" ")
+          .toLowerCase();
 
-      const matchesQuery =
-        !needle ||
-        searchableText.includes(needle);
+        const matchesQuery =
+          !needle ||
+          searchableText.includes(
+            needle
+          );
 
-      return matchesSubject && matchesQuery;
-    });
-  }, [reviewers, query, subject]);
+        return (
+          matchesSubject &&
+          matchesQuery
+        );
+      }
+    );
+  }, [
+    activeReviewers,
+    query,
+    subject,
+  ]);
 
-  // ==========================================
-  // DELETE REVIEWER + ASSOCIATED IMAGES
-  // ==========================================
+  // ========================================
+  // SWITCH TAB
+  // ========================================
 
-  async function removeReviewer(id: string) {
-    if (deletingId) return;
+  function switchTab(nextTab: Tab) {
+    setTab(nextTab);
+    setSubject("All");
+    setActionError("");
+  }
+
+  // ========================================
+  // REMOVE OFFLINE DOWNLOAD ONLY
+  // ========================================
+
+  async function removeDownload(
+    id: string
+  ) {
+    if (
+      removingLocalId ||
+      deletingId
+    ) {
+      return;
+    }
+
+    const record = downloaded.find(
+      (item) => item.id === id
+    );
+
+    if (!record) return;
+
+    const confirmed = window.confirm(
+      `Remove the offline download of "${record.reviewer.title}"?\n\n` +
+      "The online reviewer in Supabase will NOT be deleted."
+    );
+
+    if (!confirmed) return;
+
+    setRemovingLocalId(id);
+    setActionError("");
+
+    try {
+      await deleteOfflineReviewer(
+        id
+      );
+
+      setDownloaded((current) =>
+        current.filter(
+          (item) => item.id !== id
+        )
+      );
+    } catch (error) {
+      setActionError(
+        errorMessage(
+          error,
+          "Could not remove offline download."
+        )
+      );
+    } finally {
+      setRemovingLocalId(null);
+    }
+  }
+
+  // ========================================
+  // DELETE ONLINE REVIEWER + IMAGES
+  // ========================================
+
+  async function removeReviewer(
+    id: string
+  ) {
+    if (
+      deletingId ||
+      removingLocalId ||
+      !isOnline
+    ) {
+      return;
+    }
 
     const reviewer = reviewers.find(
       (item) => item.id === id
@@ -232,17 +527,18 @@ export default function ReviewersPage() {
 
     const confirmed = window.confirm(
       `Delete "${reviewer.title}"?\n\n` +
-      "The reviewer and its saved diagrams will be permanently deleted."
+      "The online reviewer and saved diagrams will be permanently deleted. " +
+      "Its downloaded copy on this device will also be removed."
     );
 
     if (!confirmed) return;
 
     setDeletingId(id);
-    setError("");
+    setActionError("");
 
     try {
       // ====================================
-      // 1. VERIFY CURRENT USER
+      // VERIFY CURRENT USER
       // ====================================
 
       const {
@@ -257,7 +553,7 @@ export default function ReviewersPage() {
       }
 
       // ====================================
-      // 2. GET ASSOCIATED IMAGE PATHS
+      // GET ASSOCIATED IMAGE PATHS
       // ====================================
 
       const {
@@ -275,22 +571,28 @@ export default function ReviewersPage() {
         );
       }
 
-      const storagePaths = (imageRecords ?? [])
-        .map((image) => image.storage_path)
+      const storagePaths = (
+        imageRecords ?? []
+      )
+        .map(
+          (image) =>
+            image.storage_path
+        )
         .filter(
           (path): path is string =>
             typeof path === "string"
         );
 
-      // Security check: only paths in the
-      // current user's reviewer folder.
-
       const allowedPrefix =
         `${user.id}/${id}/`;
 
-      const invalidPath = storagePaths.some(
-        (path) => !path.startsWith(allowedPrefix)
-      );
+      const invalidPath =
+        storagePaths.some(
+          (path) =>
+            !path.startsWith(
+              allowedPrefix
+            )
+        );
 
       if (
         invalidPath ||
@@ -303,7 +605,7 @@ export default function ReviewersPage() {
       }
 
       // ====================================
-      // 3. DELETE THE REVIEWER RECORD
+      // DELETE ONLINE REVIEWER
       // ====================================
 
       const {
@@ -317,21 +619,19 @@ export default function ReviewersPage() {
         .select("id");
 
       if (deleteError) {
-        throw new Error(deleteError.message);
+        throw new Error(
+          deleteError.message
+        );
       }
 
-      if (!deleted || deleted.length === 0) {
+      if (
+        !deleted ||
+        deleted.length === 0
+      ) {
         throw new Error(
           "Reviewer was not found or could not be deleted."
         );
       }
-
-      // reviewer_visuals records are removed
-      // automatically by ON DELETE CASCADE.
-
-      // ====================================
-      // 4. UPDATE REVIEWERS LIST
-      // ====================================
 
       setReviewers((current) =>
         current.filter(
@@ -339,8 +639,39 @@ export default function ReviewersPage() {
         )
       );
 
+      // Reviewer has been deleted online.
+      // Perform best-effort cleanup next.
+
+      const cleanupProblems:
+        string[] = [];
+
       // ====================================
-      // 5. REMOVE IMAGES FROM STORAGE
+      // DELETE LOCAL OFFLINE COPY
+      // ====================================
+
+      try {
+        await deleteOfflineReviewer(
+          id
+        );
+
+        setDownloaded((current) =>
+          current.filter(
+            (item) => item.id !== id
+          )
+        );
+      } catch (error) {
+        console.error(
+          "Offline copy cleanup failed:",
+          error
+        );
+
+        cleanupProblems.push(
+          "the local offline copy"
+        );
+      }
+
+      // ====================================
+      // DELETE SUPABASE STORAGE IMAGES
       // ====================================
 
       if (storagePaths.length > 0) {
@@ -352,31 +683,38 @@ export default function ReviewersPage() {
 
         if (storageError) {
           console.error(
-            "Reviewer deleted but image cleanup failed:",
+            "Reviewer image cleanup failed:",
             storageError
           );
 
-          setError(
-            "Reviewer deleted, but some diagram files could not be removed from Storage. Check the reviewer-visuals bucket."
+          cleanupProblems.push(
+            "some Supabase diagram files"
           );
-
-          return;
         }
       }
 
-      console.log(
-        "Reviewer and associated diagrams deleted successfully."
-      );
-    } catch (err) {
+      if (
+        cleanupProblems.length > 0
+      ) {
+        setActionError(
+          "Reviewer deleted online, but cleanup failed for " +
+          cleanupProblems.join(
+            " and "
+          ) +
+          "."
+        );
+      }
+    } catch (error) {
       console.error(
         "Failed to delete reviewer:",
-        err
+        error
       );
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to delete reviewer."
+      setActionError(
+        errorMessage(
+          error,
+          "Unable to delete reviewer."
+        )
       );
     } finally {
       setDeletingId(null);
@@ -384,12 +722,28 @@ export default function ReviewersPage() {
   }
 
   // ========================================
+  // CURRENT LOADING / ERROR STATE
+  // ========================================
+
+  const loading =
+    tab === "downloaded"
+      ? loadingDownloaded
+      : loadingOnline;
+
+  const currentError =
+    tab === "downloaded"
+      ? offlineError
+      : onlineError;
+
+  // ========================================
   // PAGE UI
   // ========================================
 
   return (
     <div className="space-y-6">
-      {/* PAGE HEADER */}
+      {/* ======================================
+          PAGE HEADER
+      ====================================== */}
 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -413,20 +767,28 @@ export default function ReviewersPage() {
           <button
             type="button"
             onClick={() => {
+              void loadDownloaded();
               void loadReviewers();
             }}
-            disabled={loading}
+            disabled={
+              loadingDownloaded ||
+              loadingOnline
+            }
             className="btn btn-secondary disabled:opacity-50"
           >
             <RefreshCw
               className={`h-4 w-4 ${
-                loading ? "animate-spin" : ""
+                loadingDownloaded ||
+                loadingOnline
+                  ? "animate-spin"
+                  : ""
               }`}
             />
+
             Refresh
           </button>
 
-          {/* CREATE */}
+          {/* CREATE REVIEWER */}
 
           <Link
             to="/create"
@@ -438,13 +800,80 @@ export default function ReviewersPage() {
         </div>
       </header>
 
-      {/* ACCOUNT INFO */}
+      {/* ======================================
+          LIBRARY TABS
+      ====================================== */}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {/* ALL REVIEWERS */}
+
+        <button
+          type="button"
+          onClick={() =>
+            switchTab("online")
+          }
+          className={`chip ${
+            tab === "online"
+              ? "chip-active"
+              : ""
+          }`}
+          aria-pressed={
+            tab === "online"
+          }
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+
+          All Reviewers
+
+          {reviewers.length > 0
+            ? ` (${reviewers.length})`
+            : ""}
+        </button>
+
+        {/* DOWNLOADED REVIEWERS */}
+
+        <button
+          type="button"
+          onClick={() =>
+            switchTab("downloaded")
+          }
+          className={`chip ${
+            tab === "downloaded"
+              ? "chip-active"
+              : ""
+          }`}
+          aria-pressed={
+            tab === "downloaded"
+          }
+        >
+          <Download className="h-3.5 w-3.5" />
+
+          Downloaded ({downloaded.length})
+        </button>
+      </div>
+
+      {/* LIBRARY DESCRIPTION */}
 
       <p className="text-xs text-muted-foreground">
-        Reviewers saved in your StudyRoom account.
+        {tab === "online"
+          ? "Reviewers saved in your StudyRoom account."
+          : "Downloaded reviewers are stored on this device and can be opened without internet."}
       </p>
 
-      {/* SEARCH AND FILTER */}
+      {/* OFFLINE INDICATOR */}
+
+      {!isOnline && (
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/20 p-3 text-sm text-muted-foreground">
+          <WifiOff className="h-4 w-4" />
+
+          You're offline. Your downloaded
+          reviewers are available below.
+        </div>
+      )}
+
+      {/* ======================================
+          SEARCH AND FILTER
+      ====================================== */}
 
       <div className="space-y-3">
         {/* SEARCH */}
@@ -456,7 +885,9 @@ export default function ReviewersPage() {
             type="search"
             value={query}
             onChange={(event) =>
-              updateSearch(event.target.value)
+              updateSearch(
+                event.target.value
+              )
             }
             placeholder="Search title, subject or content"
             className="input pl-9"
@@ -469,8 +900,8 @@ export default function ReviewersPage() {
         <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {subjects.map((item) => (
             <button
-              key={item}
               type="button"
+              key={item}
               onClick={() =>
                 setSubject(item)
               }
@@ -486,59 +917,80 @@ export default function ReviewersPage() {
         </div>
       </div>
 
-      {/* ERROR MESSAGE */}
+      {/* ======================================
+          ERROR MESSAGE
+      ====================================== */}
 
-      {error && (
+      {(actionError || currentError) && (
         <div
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
         >
-          {error}
+          {actionError ||
+            currentError}
         </div>
       )}
 
-      {/* LOADING STATE */}
+      {/* ======================================
+          LOADING STATE
+      ====================================== */}
 
       {loading ? (
         <div className="panel flex flex-col items-center justify-center px-6 py-14 text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
 
           <p className="mt-3 text-sm text-muted-foreground">
-            Loading your reviewers...
+            Loading{" "}
+            {tab === "downloaded"
+              ? "downloaded"
+              : "online"}{" "}
+            reviewers...
           </p>
         </div>
       ) : visible.length === 0 ? (
-        /* EMPTY STATE */
+        /* ====================================
+           EMPTY STATE
+        ==================================== */
 
         <div className="panel flex flex-col items-center justify-center px-6 py-14 text-center">
           <div className="grid h-12 w-12 place-items-center rounded-xl bg-secondary">
-            <BookOpen className="h-6 w-6 text-muted-foreground" />
+            {tab === "downloaded" ? (
+              <Download className="h-6 w-6 text-muted-foreground" />
+            ) : (
+              <BookOpen className="h-6 w-6 text-muted-foreground" />
+            )}
           </div>
 
           <h2 className="mt-4 text-base font-medium text-foreground">
-            {reviewers.length === 0
-              ? "No reviewers yet"
-              : "No reviewers match your search"}
+            {activeReviewers.length > 0
+              ? "No reviewers match your search"
+              : tab === "downloaded"
+                ? "No downloaded reviewers yet"
+                : "No reviewers yet"}
           </h2>
 
           <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-muted-foreground">
-            {reviewers.length === 0
-              ? "Create your first reviewer to save it to your StudyRoom account."
-              : "Try another search term or subject."}
+            {tab === "downloaded"
+              ? "Open a reviewer while online and select Save for Offline. It will appear here."
+              : "Create your first reviewer to save it to your StudyRoom account."}
           </p>
 
-          {reviewers.length === 0 && (
-            <Link
-              to="/create"
-              className="btn btn-primary btn-sm mt-5"
-            >
-              <Sparkles className="h-4 w-4" />
-              Create reviewer
-            </Link>
-          )}
+          {tab === "online" &&
+            activeReviewers.length === 0 && (
+              <Link
+                to="/create"
+                className="btn btn-primary btn-sm mt-5"
+              >
+                <Sparkles className="h-4 w-4" />
+
+                Create reviewer
+              </Link>
+            )}
         </div>
       ) : (
-        /* REVIEWER LIST */
+        /* ====================================
+           REVIEWER LIST
+        ==================================== */
 
         <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
           {visible.map((reviewer) => (
@@ -564,7 +1016,8 @@ export default function ReviewersPage() {
                   {/* SUBJECT */}
 
                   <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {reviewer.subject || "General"}
+                    {reviewer.subject ||
+                      "General"}
                   </span>
 
                   {/* AI BADGE */}
@@ -575,30 +1028,60 @@ export default function ReviewersPage() {
                       AI
                     </span>
                   )}
+
+                  {/* OFFLINE BADGE */}
+
+                  {downloadedIds.has(
+                    reviewer.id
+                  ) && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                      <CheckCircle2 className="h-3 w-3" />
+
+                      Saved Offline
+                    </span>
+                  )}
                 </div>
 
-                {/* PREVIEW */}
+                {/* CONTENT PREVIEW */}
 
                 <p className="mt-1.5 line-clamp-1 text-[13px] text-muted-foreground">
-                  {String(reviewer.content ?? "")
-                    .replace(/[#*_`>-]/g, " ")
+                  {String(
+                    reviewer.content ?? ""
+                  )
+                    .replace(
+                      /[#*_`>-]/g,
+                      " "
+                    )
                     .slice(0, 160)}
                 </p>
 
                 {/* DATE */}
 
                 <p className="mt-1.5 text-[11px] text-muted-foreground">
-                  Updated{" "}
-                  {formatDate(
-                    reviewer.updated_date
-                  )}
+                  {tab === "downloaded"
+                    ? `Downloaded ${formatDate(
+                        savedAtById.has(
+                          reviewer.id
+                        )
+                          ? new Date(
+                              savedAtById.get(
+                                reviewer.id
+                              ) ?? 0
+                            ).toISOString()
+                          : null
+                      )}`
+                    : `Updated ${formatDate(
+                        reviewer.updated_date
+                      )}`}
                 </p>
               </div>
 
-              {/* ACTION BUTTONS */}
+              {/* ==================================
+                  ACTION BUTTONS
+              ================================== */}
 
               <div className="flex shrink-0 items-center gap-2">
-                {/* READ */}
+                {/* READ REVIEWER */}
 
                 <Link
                   to={`/reviewers/${encodeURIComponent(
@@ -609,37 +1092,73 @@ export default function ReviewersPage() {
                   Read
                 </Link>
 
-                {/* EDIT */}
+                {tab === "online" ? (
+                  <>
+                    {/* EDIT ONLINE REVIEWER */}
 
-                <Link
-                  to={`/reviewers/${encodeURIComponent(
-                    reviewer.id
-                  )}/edit`}
-                  aria-label={`Edit ${reviewer.title}`}
-                  className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Link>
+                    <Link
+                      to={`/reviewers/${encodeURIComponent(
+                        reviewer.id
+                      )}/edit`}
+                      aria-label={`Edit ${reviewer.title}`}
+                      className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Link>
 
-                {/* DELETE */}
+                    {/* DELETE ONLINE REVIEWER */}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    void removeReviewer(
-                      reviewer.id
-                    );
-                  }}
-                  disabled={deletingId !== null}
-                  aria-label={`Delete ${reviewer.title}`}
-                  className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
-                >
-                  {deletingId === reviewer.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void removeReviewer(
+                          reviewer.id
+                        );
+                      }}
+                      disabled={
+                        deletingId !== null ||
+                        removingLocalId !== null ||
+                        !isOnline
+                      }
+                      aria-label={`Delete ${reviewer.title}`}
+                      title="Delete online reviewer"
+                      className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
+                    >
+                      {deletingId ===
+                      reviewer.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </>
+                ) : (
+                  /* REMOVE DOWNLOADED COPY */
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void removeDownload(
+                        reviewer.id
+                      );
+                    }}
+                    disabled={
+                      removingLocalId !==
+                        null ||
+                      deletingId !== null
+                    }
+                    aria-label={`Remove offline download of ${reviewer.title}`}
+                    title="Remove offline copy only"
+                    className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
+                  >
+                    {removingLocalId ===
+                    reviewer.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
               </div>
             </article>
           ))}
