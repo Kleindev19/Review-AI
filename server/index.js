@@ -3,6 +3,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { GoogleGenAI, Type } from "@google/genai";
+import { REVIEWER_AUTO_DETECT_INSTRUCTIONS } from "./reviewerAutoDetect.js";
 
 import {
   requireAuth,
@@ -650,11 +651,43 @@ app.post(
         if (text === null) return;
       }
 
+   
       const prompt = `
 You are StudyRoom's educational reviewer writer.
 
-Create a CLEAR, DETAILED, WELL-STRUCTURED
-reviewer using ONLY the supplied lesson.
+${REVIEWER_AUTO_DETECT_INSTRUCTIONS}
+
+Generate a CLEAR, DETAILED, WELL-STRUCTURED
+academic reviewer using ONLY the provided
+study material.
+
+AUTOMATIC CONTENT HANDLING:
+
+If the material contains lessons, definitions,
+notes, concepts, or educational explanations,
+generate a structured lesson reviewer.
+
+If the material contains actual questions,
+worksheets, exercises, or unsolved mathematical
+problems, answer those questions and include
+the explanations or step-by-step solutions
+inside the reviewer.
+
+If lessons and questions are mixed, preserve
+the lesson explanations and answer the
+questions in a dedicated section.
+
+Do not treat an already-solved teaching
+example as an unanswered exercise.
+
+Do not invent questions, missing numerical
+values, or unsupported answers.
+
+Always preserve the existing output format
+and JSON structure required by StudyRoom.
+
+
+
 
 RULES:
 
@@ -669,16 +702,54 @@ RULES:
 4. Write readable Markdown with
    headings and bullet points.
 
-5. Include these sections whenever
-   supported by the lesson:
 
-   OVERVIEW
-   KEY CONCEPTS
-   DETAILED EXPLANATIONS
-   IMPORTANT TERMS / DEFINITIONS
-   QUICK RECAP
+5. Automatically organize the reviewer
+   according to the detected content.
 
-6. Omit unsupported sections.
+   FOR LESSON-ONLY CONTENT:
+
+   Include these sections where relevant:
+
+   ## Overview
+   ## Key Concepts
+   ## Detailed Explanations
+   ## Important Terms / Definitions
+   ## Important Formulas
+   ## Quick Recap
+
+   FOR CONTENT WITH ACTUAL QUESTIONS:
+
+   Include a dedicated section:
+
+   ## Answered Questions and Solutions
+
+   For each readable question, include:
+
+   **Question:** The original question.
+
+   **Answer:** The correct answer.
+
+   **Solution:** Show step-by-step calculations
+   when the question requires computation.
+
+   **Explanation:** Explain how the answer
+   was obtained and which concepts were used.
+
+   Preserve the original question numbers.
+
+   Do not omit any readable question merely
+   because there are many questions.
+
+   FOR MIXED LESSONS AND QUESTIONS:
+
+   Include the relevant lesson sections,
+   followed by Answered Questions and
+   Solutions, then a Quick Recap.
+
+6. Omit unsupported sections, but always
+   include answers when actual questions
+   requiring answers are present.
+
 
 7. Do not invent facts.
 
@@ -738,6 +809,33 @@ ${text}
                     `
 
 ADDITIONAL VISUAL INSTRUCTIONS:
+<CodeBlock language="text" editable>
+CAMERA AND SCANNED QUESTION DETECTION:
+
+
+Examine all uploaded images for actual
+questions, worksheets and exercises.
+
+If mathematical or scientific problems
+are detected, identify their given values,
+select the appropriate formulas, and
+provide step-by-step solutions.
+
+If questions are present without numerical
+calculations, provide accurate answers
+and understandable explanations.
+
+If the images only contain lessons or
+study notes, generate a normal reviewer
+without inventing additional questions.
+
+If a page contains both lesson notes and
+unanswered problems, preserve the lesson
+and answer the problems.
+
+Read all images in their supplied order.
+Do not skip later pages.
+Do not guess missing or unreadable values.
 
 Analyze the supplied diagrams, graphs,
 equations, geometry figures and tables.
