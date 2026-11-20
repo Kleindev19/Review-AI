@@ -12,6 +12,7 @@ import {
 
 import {
   AlertCircle,
+  Camera,
   Check,
   FileText,
   FileUp,
@@ -20,6 +21,7 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  Upload,
 } from "lucide-react";
 
 // ==========================================
@@ -93,12 +95,10 @@ const filenameSorter = new Intl.Collator(
 // ==========================================
 
 function getExtension(file: File): string {
-  return (
-    file.name
-      .split(".")
-      .pop()
-      ?.toLowerCase() ?? ""
-  );
+  return file.name
+    .split(".")
+    .pop()
+    ?.toLowerCase() ?? "";
 }
 
 function isImageFile(file: File): boolean {
@@ -131,9 +131,7 @@ function formatBytes(bytes: number): string {
 // PDF TEXT EXTRACTION
 // ==========================================
 
-async function extractPdf(
-  file: File
-): Promise<string> {
+async function extractPdf(file: File): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
 
   const worker = await import(
@@ -171,9 +169,7 @@ async function extractPdf(
         for (const item of content.items) {
           if ("str" in item) {
             pageText += item.str;
-            pageText += item.hasEOL
-              ? "\n"
-              : " ";
+            pageText += item.hasEOL ? "\n" : " ";
           }
         }
 
@@ -195,48 +191,42 @@ async function extractPdf(
 // DOCX TEXT EXTRACTION
 // ==========================================
 
-async function extractDocx(
-  file: File
-): Promise<string> {
+async function extractDocx(file: File): Promise<string> {
   const mammoth = await import("mammoth");
 
-  const result =
-    await mammoth.extractRawText({
-      arrayBuffer:
-        await file.arrayBuffer(),
-    });
+  const result = await mammoth.extractRawText({
+    arrayBuffer: await file.arrayBuffer(),
+  });
 
   return result.value;
 }
 
 // ==========================================
-// UPLOAD PANEL
+// COMPONENT
 // ==========================================
 
 export default function UploadPanel({
   onReady,
 }: UploadPanelProps) {
-  // Main picker accepts all supported files.
-  // Add picker accepts images only.
-
   const replaceInputRef =
     useRef<HTMLInputElement>(null);
 
   const addInputRef =
     useRef<HTMLInputElement>(null);
 
+  const cameraInputRef =
+    useRef<HTMLInputElement>(null);
+
   const processingRef = useRef(false);
-
-  // Preserve selected files between
-  // consecutive file-picker selections.
-
   const filesRef = useRef<File[]>([]);
 
   const readyResultRef =
     useRef<UploadResult | null>(null);
 
+  const photoCounterRef = useRef(0);
+
   // ========================================
-  // STATES
+  // STATE
   // ========================================
 
   const [status, setStatus] =
@@ -264,7 +254,7 @@ export default function UploadPanel({
     status === "reading" ||
     status === "saving";
 
-  const imageSelection =
+  const isImageSelection =
     files.length > 0 &&
     files.every(isImageFile);
 
@@ -273,18 +263,13 @@ export default function UploadPanel({
     0
   );
 
-  // ========================================
-  // UPDATE SELECTED FILES
-  // ========================================
-
-  function updateFiles(next: File[]) {
-    filesRef.current = next;
-    setFiles(next);
+  function updateFiles(nextFiles: File[]) {
+    filesRef.current = nextFiles;
+    setFiles(nextFiles);
   }
 
   // ========================================
   // PROCESS FILES
-  // REPLACE OR APPEND MODE
   // ========================================
 
   async function processFiles(
@@ -292,7 +277,7 @@ export default function UploadPanel({
     mode: PickMode
   ) {
     if (
-      !pickedFiles.length ||
+      pickedFiles.length === 0 ||
       processingRef.current
     ) {
       return;
@@ -300,24 +285,32 @@ export default function UploadPanel({
 
     setError("");
 
-    // ======================================
-    // MERGE IMAGES WHEN APPENDING
-    // ======================================
+    // Sort each selected batch by filename.
+    // Previously uploaded images remain
+    // in their original page order.
 
-    let selected =
+    const orderedPicked =
+      pickedFiles.every(isImageFile)
+        ? [...pickedFiles].sort((a, b) =>
+            filenameSorter.compare(
+              a.name,
+              b.name
+            )
+          )
+        : [...pickedFiles];
+
+    const selected: File[] =
       mode === "append"
         ? [...filesRef.current]
         : [];
 
     let added = 0;
 
-    for (const file of pickedFiles) {
-      // Prevent duplicate files when adding.
-
+    for (const file of orderedPicked) {
       if (
         mode === "append" &&
-        selected.some((item) =>
-          isSameFile(item, file)
+        selected.some((existing) =>
+          isSameFile(existing, file)
         )
       ) {
         continue;
@@ -329,13 +322,13 @@ export default function UploadPanel({
 
     if (added === 0) {
       setError(
-        "Those images are already selected. Choose different images."
+        "These images are already selected."
       );
       return;
     }
 
     // ======================================
-    // VALIDATE FILE TYPES
+    // VALIDATION
     // ======================================
 
     const unsupported = selected.find(
@@ -350,35 +343,24 @@ export default function UploadPanel({
       return;
     }
 
-    // Documents can only be selected
-    // one at a time.
-
     if (
       selected.length > 1 &&
       !selected.every(isImageFile)
     ) {
       setError(
-        "Only JPG/PNG images can be uploaded together. Choose PDF, DOCX or TXT by itself."
+        "Only JPG/PNG images can be combined. Upload PDF, DOCX or TXT individually."
       );
       return;
     }
-
-    // ======================================
-    // MAXIMUM IMAGE COUNT
-    // ======================================
 
     if (
       selected.length > MAX_IMAGE_FILES
     ) {
       setError(
-        `You can upload a maximum of ${MAX_IMAGE_FILES} images per reviewer. You currently selected ${selected.length}.`
+        `Maximum of ${MAX_IMAGE_FILES} images per reviewer.`
       );
       return;
     }
-
-    // ======================================
-    // EMPTY FILE PROTECTION
-    // ======================================
 
     const empty = selected.find(
       (file) => file.size === 0
@@ -391,10 +373,6 @@ export default function UploadPanel({
       return;
     }
 
-    // ======================================
-    // PER-FILE SIZE LIMIT
-    // ======================================
-
     const oversized = selected.find(
       (file) =>
         file.size > MAX_FILE_SIZE
@@ -402,43 +380,24 @@ export default function UploadPanel({
 
     if (oversized) {
       setError(
-        `${oversized.name} exceeds the 15 MB per-file limit.`
+        `${oversized.name} exceeds the 15 MB file limit.`
       );
       return;
     }
 
-    // ======================================
-    // TOTAL IMAGE BATCH LIMIT
-    // ======================================
-
-    const selectedBytes = selected.reduce(
-      (sum, file) =>
-        sum + file.size,
+    const combinedSize = selected.reduce(
+      (sum, file) => sum + file.size,
       0
     );
 
     if (
       selected.every(isImageFile) &&
-      selectedBytes > MAX_IMAGE_BATCH_SIZE
+      combinedSize > MAX_IMAGE_BATCH_SIZE
     ) {
       setError(
-        "Total image size must not exceed 60 MB."
+        "The combined image size must not exceed 60 MB."
       );
       return;
-    }
-
-    // ======================================
-    // SORT IMAGES BY FILENAME
-    // ======================================
-
-    if (selected.every(isImageFile)) {
-      selected = selected.sort(
-        (a, b) =>
-          filenameSorter.compare(
-            a.name,
-            b.name
-          )
-      );
     }
 
     const firstFile = selected[0];
@@ -448,11 +407,8 @@ export default function UploadPanel({
     }
 
     // ======================================
-    // SAVE PREVIOUS SUCCESSFUL RESULT
+    // SAVE PREVIOUS VALID SELECTION
     // ======================================
-
-    // If processing a new image fails,
-    // restore the previous valid upload.
 
     const previousFiles = [
       ...filesRef.current,
@@ -466,6 +422,32 @@ export default function UploadPanel({
 
     const previousVisualCount =
       visualCount;
+
+    // Reuse previously processed images
+    // when adding another photo.
+
+    const previousImageMap =
+      new Map<File, VisualPage>();
+
+    if (
+      mode === "append" &&
+      previousResult?.visuals &&
+      previousResult.visuals.length ===
+        previousFiles.length &&
+      previousFiles.every(isImageFile)
+    ) {
+      previousFiles.forEach((file, index) => {
+        const visual =
+          previousResult.visuals?.[index];
+
+        if (visual) {
+          previousImageMap.set(
+            file,
+            visual
+          );
+        }
+      });
+    }
 
     // ======================================
     // BEGIN PROCESSING
@@ -481,14 +463,11 @@ export default function UploadPanel({
     setCharacters(0);
     setVisualCount(0);
     setProcessedImages(0);
-
     setStatus("reading");
 
     try {
       let text = "";
-
-      let visuals:
-        VisualPage[] = [];
+      let visuals: VisualPage[] = [];
 
       const extension =
         getExtension(firstFile);
@@ -498,14 +477,11 @@ export default function UploadPanel({
       // ====================================
 
       if (extension === "pdf") {
-        text = await extractPdf(
+        text = await extractPdf(firstFile);
+
+        visuals = await extractPdfVisuals(
           firstFile
         );
-
-        visuals =
-          await extractPdfVisuals(
-            firstFile
-          );
       }
 
       // ====================================
@@ -513,9 +489,7 @@ export default function UploadPanel({
       // ====================================
 
       else if (extension === "docx") {
-        text = await extractDocx(
-          firstFile
-        );
+        text = await extractDocx(firstFile);
       }
 
       // ====================================
@@ -527,47 +501,54 @@ export default function UploadPanel({
       }
 
       // ====================================
-      // SINGLE OR MULTIPLE IMAGES
+      // JPG / PNG / CAMERA PHOTOS
       // ====================================
 
       else {
-        const images:
-          VisualPage[] = [];
+        const images: VisualPage[] = [];
 
         for (
-          let i = 0;
-          i < selected.length;
-          i++
+          let index = 0;
+          index < selected.length;
+          index++
         ) {
           const imageFile =
-            selected[i];
+            selected[index];
 
           if (!imageFile) {
             continue;
           }
 
-          const image =
-            await extractImageVisual(
+          const cached =
+            previousImageMap.get(
               imageFile
             );
 
-          images.push({
-            pageNumber: i + 1,
-            mimeType:
-              image.mimeType,
-            dataUrl:
-              image.dataUrl,
-          });
+          if (cached) {
+            images.push({
+              ...cached,
+              pageNumber: index + 1,
+            });
+          } else {
+            const image =
+              await extractImageVisual(
+                imageFile
+              );
 
-          setProcessedImages(i + 1);
+            images.push({
+              pageNumber: index + 1,
+              mimeType: image.mimeType,
+              dataUrl: image.dataUrl,
+            });
+          }
+
+          setProcessedImages(
+            index + 1
+          );
         }
 
         visuals = images;
       }
-
-      // ====================================
-      // VALIDATE EXTRACTED CONTENT
-      // ====================================
 
       text = text.trim();
 
@@ -581,46 +562,34 @@ export default function UploadPanel({
       }
 
       // ====================================
-      // SAVE EXTRACTED TEXT MATERIAL
+      // SAVE SINGLE FILE TO MATERIALS
       // ====================================
 
-      
-      // ====================================
-      // SAVE MATERIAL TO INDEXEDDB
-      // ====================================
+      // Scanned PDFs and single photos
+      // are saved even when no extracted
+      // text is available.
 
-      let materialId: string | null = null;
-
-      // A scanned PDF can contain images
-      // even when extracted text is empty.
-      //
-      // Save the original single file when
-      // it has readable text or visual pages.
-      //
-      // Image batches are handled separately
-      // because each image is a different file.
-
-      const hasReadableContent =
-        text.length > 0 ||
-        visuals.length > 0;
+      let materialId: string | null =
+        null;
 
       if (
         selected.length === 1 &&
-        hasReadableContent
+        (text.length > 0 ||
+          visuals.length > 0)
       ) {
         setStatus("saving");
 
-        const material = await saveMaterial(
-          firstFile,
-          text
-        );
+        const material =
+          await saveMaterial(
+            firstFile,
+            text
+          );
 
         materialId = material.id;
       }
 
-
       // ====================================
-      // SOURCE LABEL
+      // RESULT
       // ====================================
 
       const sourceLabel =
@@ -632,29 +601,17 @@ export default function UploadPanel({
               ]?.name ?? firstFile.name
             })`;
 
-      // ====================================
-      // PREPARE UPLOAD RESULT
-      // ====================================
-
-      const result:
-        UploadResult = {
+      const result: UploadResult = {
         text,
         sourceLabel,
         materialId,
         visuals,
       };
 
-      readyResultRef.current =
-        result;
+      readyResultRef.current = result;
 
-      setCharacters(
-        text.length
-      );
-
-      setVisualCount(
-        visuals.length
-      );
-
+      setCharacters(text.length);
+      setVisualCount(visuals.length);
       setStatus("ready");
 
       onReady(result);
@@ -670,17 +627,11 @@ export default function UploadPanel({
           : "The selected files could not be processed."
       );
 
-      // ====================================
-      // RESTORE PREVIOUS RESULT
-      // ====================================
-
       if (previousResult) {
         readyResultRef.current =
           previousResult;
 
-        updateFiles(
-          previousFiles
-        );
+        updateFiles(previousFiles);
 
         setCharacters(
           previousCharacters
@@ -692,9 +643,7 @@ export default function UploadPanel({
 
         setStatus("ready");
 
-        onReady(
-          previousResult
-        );
+        onReady(previousResult);
       } else {
         updateFiles([]);
 
@@ -711,7 +660,7 @@ export default function UploadPanel({
   }
 
   // ========================================
-  // MAIN FILE PICKER - REPLACE FILES
+  // UPLOAD FILES
   // ========================================
 
   function handleReplace(
@@ -730,7 +679,7 @@ export default function UploadPanel({
   }
 
   // ========================================
-  // ADD MORE IMAGES - APPEND FILES
+  // ADD MORE IMAGES
   // ========================================
 
   function handleAddImages(
@@ -749,6 +698,96 @@ export default function UploadPanel({
   }
 
   // ========================================
+  // CAMERA PHOTO CAPTURE
+  // ========================================
+
+  function handleCamera(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const capturedFile =
+      event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!capturedFile) {
+      return;
+    }
+
+    // Camera files may have generic names.
+    // Give JPEG/PNG photos a unique name
+    // to preserve each captured page.
+
+    const fileType =
+      capturedFile.type.toLowerCase();
+
+    const originalExtension =
+      getExtension(capturedFile);
+
+    const supportedCameraImage =
+      IMAGE_EXTENSIONS.has(
+        originalExtension
+      ) ||
+      fileType === "image/jpeg" ||
+      fileType === "image/png";
+
+    if (!supportedCameraImage) {
+      setError(
+        "This camera image format is not supported. Please use JPG or PNG."
+      );
+      return;
+    }
+
+    const extension =
+      fileType === "image/png" ||
+      (
+        !fileType &&
+        originalExtension === "png"
+      )
+        ? "png"
+        : "jpg";
+
+    photoCounterRef.current += 1;
+
+    const photoNumber =
+      String(
+        photoCounterRef.current
+      ).padStart(3, "0");
+
+    const photo = new File(
+      [capturedFile],
+      `lesson-photo-${photoNumber}.${extension}`,
+      {
+        type:
+          capturedFile.type ||
+          (extension === "png"
+            ? "image/png"
+            : "image/jpeg"),
+        lastModified:
+          capturedFile.lastModified,
+      }
+    );
+
+    // If current selection contains images,
+    // add the new photo as the next page.
+    //
+    // If current selection is a PDF/DOCX/TXT,
+    // start a new image selection.
+
+    const canAppend =
+      filesRef.current.length > 0 &&
+      filesRef.current.every(
+        isImageFile
+      );
+
+    void processFiles(
+      [photo],
+      canAppend
+        ? "append"
+        : "replace"
+    );
+  }
+
+  // ========================================
   // DRAG AND DROP
   // ========================================
 
@@ -756,7 +795,6 @@ export default function UploadPanel({
     event: DragEvent<HTMLDivElement>
   ) {
     event.preventDefault();
-
     setDragging(false);
 
     if (processingRef.current) {
@@ -767,21 +805,18 @@ export default function UploadPanel({
       event.dataTransfer.files
     );
 
-    // Append dropped images if
-    // current selection is also images.
+    if (picked.length === 0) {
+      return;
+    }
 
-    const append =
+    const canAppend =
       filesRef.current.length > 0 &&
-      filesRef.current.every(
-        isImageFile
-      ) &&
-      picked.every(
-        isImageFile
-      );
+      filesRef.current.every(isImageFile) &&
+      picked.every(isImageFile);
 
     void processFiles(
       picked,
-      append
+      canAppend
         ? "append"
         : "replace"
     );
@@ -811,7 +846,7 @@ export default function UploadPanel({
   }
 
   // ========================================
-  // UI PROGRESS
+  // UI STATE
   // ========================================
 
   const activeStep =
@@ -822,12 +857,17 @@ export default function UploadPanel({
         : 0;
 
   const progress =
-    imageSelection &&
+    isImageSelection &&
     files.length > 0
       ? (processedImages /
           files.length) *
         100
       : 0;
+
+  const imageLimitReached =
+    isImageSelection &&
+    files.length >=
+      MAX_IMAGE_FILES;
 
   // ========================================
   // RENDER
@@ -835,10 +875,6 @@ export default function UploadPanel({
 
   return (
     <div className="space-y-4">
-      {/* ====================================
-          UPLOAD AREA
-      ==================================== */}
-
       <div
         onDragOver={(event) => {
           event.preventDefault();
@@ -851,7 +887,7 @@ export default function UploadPanel({
           setDragging(false)
         }
         onDrop={handleDrop}
-        className={`rounded-xl border border-dashed px-5 py-9 text-center transition-colors ${
+        className={`rounded-xl border border-dashed px-5 py-8 text-center transition-colors ${
           dragging
             ? "border-primary/70 bg-primary/[0.07]"
             : status === "ready"
@@ -859,7 +895,9 @@ export default function UploadPanel({
               : "border-border bg-background/40"
         }`}
       >
-        {/* MAIN FILE PICKER */}
+        {/* ==================================
+            HIDDEN FILE INPUTS
+        ================================== */}
 
         <input
           ref={replaceInputRef}
@@ -872,8 +910,6 @@ export default function UploadPanel({
           className="sr-only"
         />
 
-        {/* ADD MORE IMAGES PICKER */}
-
         <input
           ref={addInputRef}
           id="material-images-add"
@@ -881,7 +917,25 @@ export default function UploadPanel({
           accept=".jpg,.jpeg,.png"
           multiple
           onChange={handleAddImages}
-          disabled={busy}
+          disabled={
+            busy || imageLimitReached
+          }
+          className="sr-only"
+        />
+
+        {/* Opens the device's native
+            camera when supported. */}
+
+        <input
+          ref={cameraInputRef}
+          id="material-camera"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleCamera}
+          disabled={
+            busy || imageLimitReached
+          }
           className="sr-only"
         />
 
@@ -900,7 +954,7 @@ export default function UploadPanel({
             <Check className="h-5 w-5" />
           ) : busy ? (
             <Loader2 className="h-5 w-5 animate-spin" />
-          ) : imageSelection ? (
+          ) : isImageSelection ? (
             <Images className="h-5 w-5" />
           ) : (
             <FileUp className="h-5 w-5" />
@@ -937,18 +991,18 @@ export default function UploadPanel({
             </p>
           ) : (
             <p className="text-[13.5px] font-medium text-foreground">
-              Drop your files here
+              Add your study material
             </p>
           )}
         </div>
 
         {/* ==================================
-            FILE DETAILS
+            DETAILS
         ================================== */}
 
         <p className="mt-2 text-xs text-muted-foreground">
           {status === "reading" &&
-          imageSelection
+          isImageSelection
             ? `Processing image ${processedImages} of ${files.length}...`
             : status === "reading"
               ? "Processing document and visuals..."
@@ -956,14 +1010,14 @@ export default function UploadPanel({
                 ? "Saving extracted content..."
                 : status === "ready"
                   ? `${formatBytes(totalSize)} · ${characters.toLocaleString()} characters · ${visualCount} visual pages`
-                  : "PDF, DOCX, TXT, or up to 30 JPG/PNG images"}
+                  : "Upload a file or take a picture of your lesson"}
         </p>
 
         {/* ==================================
-            IMAGE PROCESSING PROGRESS
+            PROGRESS
         ================================== */}
 
-        {busy && imageSelection && (
+        {busy && isImageSelection && (
           <div className="mx-auto mt-4 max-w-xs">
             <div className="h-1.5 overflow-hidden rounded-full bg-muted">
               <div
@@ -975,20 +1029,18 @@ export default function UploadPanel({
             </div>
 
             <p className="mt-1.5 text-xs text-muted-foreground">
-              {Math.round(
-                progress
-              )}
-              % of images processed
+              {Math.round(progress)}%
+              of images processed
             </p>
           </div>
         )}
 
         {/* ==================================
-            UPLOAD BUTTONS
+            MAIN ACTION BUTTONS
         ================================== */}
 
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          {/* BROWSE / REPLACE */}
+        <div className="mx-auto mt-5 grid max-w-sm grid-cols-2 gap-2">
+          {/* UPLOAD FILES */}
 
           <button
             type="button"
@@ -996,69 +1048,98 @@ export default function UploadPanel({
               replaceInputRef.current?.click()
             }
             disabled={busy}
-            className="btn btn-secondary btn-sm disabled:opacity-50"
+            className="flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-3 text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {files.length > 0 ? (
-              <>
-                <RotateCcw className="h-3.5 w-3.5" />
-                Replace files
-              </>
-            ) : (
-              <>
-                <FileUp className="h-3.5 w-3.5" />
-                Browse files
-              </>
-            )}
+            <Upload className="h-5 w-5 text-primary" />
+
+            <span className="text-xs font-medium">
+              Upload Files
+            </span>
+
+            <span className="text-[10px] text-muted-foreground">
+              PDF, DOCX, TXT, Images
+            </span>
           </button>
 
-          {/* ADD IMAGES */}
+          {/* TAKE PHOTO */}
 
-          {imageSelection &&
-            files.length <
-              MAX_IMAGE_FILES && (
-              <button
-                type="button"
-                onClick={() =>
-                  addInputRef.current?.click()
-                }
-                disabled={busy}
-                className="btn btn-secondary btn-sm disabled:opacity-50"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add more images
-              </button>
-            )}
+          <button
+            type="button"
+            onClick={() =>
+              cameraInputRef.current?.click()
+            }
+            disabled={
+              busy || imageLimitReached
+            }
+            className="flex min-h-20 flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-3 text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Camera className="h-5 w-5 text-primary" />
 
-          {/* CLEAR */}
+            <span className="text-xs font-medium">
+              Take Photo
+            </span>
 
-          {files.length > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              Camera / Capture
+            </span>
+          </button>
+        </div>
+
+        {/* ==================================
+            ADD / REPLACE / CLEAR
+        ================================== */}
+
+        {files.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            {isImageSelection &&
+              !imageLimitReached && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    addInputRef.current?.click()
+                  }
+                  disabled={busy}
+                  className="btn btn-secondary btn-sm"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add more images
+                </button>
+              )}
+
             <button
               type="button"
-              onClick={
-                clearSelection
+              onClick={() =>
+                replaceInputRef.current?.click()
               }
               disabled={busy}
-              className="btn btn-ghost btn-sm disabled:opacity-50"
+              className="btn btn-secondary btn-sm"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Replace files
+            </button>
+
+            <button
+              type="button"
+              onClick={clearSelection}
+              disabled={busy}
+              className="btn btn-ghost btn-sm"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Clear
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* ==================================
             READY MESSAGE
         ================================== */}
 
         {status === "ready" && (
-          <p
-            className="mt-3 text-xs text-muted-foreground"
-            role="status"
-          >
-            Files processed.{" "}
-            {imageSelection
-              ? "Add more images or generate your reviewer."
-              : "Ready to generate your reviewer."}
+          <p className="mt-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <Check className="h-3.5 w-3.5" />
+              Files processed and ready for AI
+            </span>
           </p>
         )}
 
@@ -1066,15 +1147,27 @@ export default function UploadPanel({
             IMAGE COUNT
         ================================== */}
 
-        {imageSelection &&
+        {isImageSelection &&
           files.length > 0 && (
             <p className="mt-2 text-[11px] text-muted-foreground">
               {files.length}/{MAX_IMAGE_FILES} images
               {" · "}
-              Select several at once using Ctrl/Shift,
-              or add them one by one.
+              You can keep taking photos
+              to add more pages.
             </p>
           )}
+
+        {imageLimitReached && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Maximum of 30 images reached.
+          </p>
+        )}
+
+        {!files.length && (
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Up to 30 JPG/PNG images per reviewer
+          </p>
+        )}
       </div>
 
       {/* ====================================
@@ -1083,52 +1176,48 @@ export default function UploadPanel({
 
       {status !== "idle" && (
         <ol className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
-          {STEPS.map(
-            (label, stepIndex) => {
-              const done =
-                status === "ready" ||
-                stepIndex <
-                  activeStep;
+          {STEPS.map((label, index) => {
+            const done =
+              status === "ready" ||
+              index < activeStep;
 
-              const active =
-                status !== "ready" &&
-                stepIndex ===
-                  activeStep;
+            const active =
+              status !== "ready" &&
+              index === activeStep;
 
-              return (
-                <li
-                  key={label}
-                  className="flex items-center gap-1.5 text-xs"
+            return (
+              <li
+                key={label}
+                className="flex items-center gap-1.5 text-xs"
+              >
+                <span
+                  className={`grid h-4 w-4 place-items-center rounded-full border ${
+                    done
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : active
+                        ? "border-primary/60 text-primary"
+                        : "border-border text-muted-foreground"
+                  }`}
                 >
-                  <span
-                    className={`grid h-4 w-4 place-items-center rounded-full border ${
-                      done
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : active
-                          ? "border-primary/60 text-primary"
-                          : "border-border text-muted-foreground"
-                    }`}
-                  >
-                    {done ? (
-                      <Check className="h-2.5 w-2.5" />
-                    ) : active ? (
-                      <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                    ) : null}
-                  </span>
+                  {done ? (
+                    <Check className="h-2.5 w-2.5" />
+                  ) : active ? (
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                  ) : null}
+                </span>
 
-                  <span
-                    className={
-                      done || active
-                        ? "text-foreground/85"
-                        : "text-muted-foreground"
-                    }
-                  >
-                    {label}
-                  </span>
-                </li>
-              );
-            }
-          )}
+                <span
+                  className={
+                    done || active
+                      ? "text-foreground/85"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {label}
+                </span>
+              </li>
+            );
+          })}
         </ol>
       )}
 
@@ -1142,7 +1231,6 @@ export default function UploadPanel({
           className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-[13px] text-destructive"
         >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-
           <span>{error}</span>
         </p>
       )}
