@@ -1,4 +1,5 @@
 
+import html2pdf from "html2pdf.js";
 export type ReviewerPdfVisual = {
   pageNumber: number;
   url: string;
@@ -517,8 +518,7 @@ export async function printReviewerPdf({
     // ======================================
 
     // Lazy-load PDF library on export only.
-    const { default: html2pdf } =
-      await import("html2pdf.js");
+    
 
     // Use lower canvas scale on mobile
     // to reduce memory consumption.

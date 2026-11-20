@@ -61,6 +61,13 @@ export default defineConfig({
           "**/*.{js,css,html,ico,png,svg,woff2}",
         ],
 
+        // Allow the larger PDF export bundle
+        // to be included in the PWA precache.
+        maximumFileSizeToCacheInBytes:
+          3 * 1024 * 1024,
+
+        // Remove outdated cached assets
+        // after a new deployment.
         cleanupOutdatedCaches: true,
       },
     }),
