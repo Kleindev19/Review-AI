@@ -1,0 +1,52 @@
+
+/* ==========================================
+   REVIEW AI — MATH RENDERING FIX
+========================================== */
+
+.reviewer-math {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+/* Normal text spacing */
+.reviewer-math p,
+.reviewer-math li {
+  line-height: 1.9;
+}
+
+/* Give inline fractions enough space */
+.reviewer-math p:has(.katex .mfrac),
+.reviewer-math li:has(.katex .mfrac) {
+  line-height: 2.4;
+}
+
+/* Standalone equations */
+.reviewer-math .katex-display {
+  display: block;
+  max-width: 100%;
+
+  margin: 1.25rem 0;
+  padding: 0.85rem 0.35rem;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  text-align: left;
+  scrollbar-width: thin;
+}
+
+/* Preserve the size and structure of formulas */
+.reviewer-math .katex-display > .katex {
+  display: inline-block;
+  min-width: max-content;
+  text-align: left;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 640px) {
+  .reviewer-math .katex-display {
+    margin: 1rem 0;
+    padding: 0.75rem 0.25rem;
+    font-size: 0.95em;
+  }
+}

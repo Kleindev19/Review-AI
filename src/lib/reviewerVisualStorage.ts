@@ -7,8 +7,10 @@ import { supabase } from "./supabaseClient";
 
 const BUCKET = "reviewer-visuals";
 
-const MAX_IMAGES = 3;
+export const MAX_REVIEWER_IMAGES = 30;
+
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+const MAX_TOTAL_IMAGE_SIZE = 30 * 1024 * 1024;
 
 // ==========================================
 // TYPES
@@ -25,11 +27,20 @@ export type UploadedReviewerVisual = {
   storagePath: string;
 };
 
+type PreparedVisual = {
+  pageNumber: number;
+  blob: Blob;
+};
+
 // ==========================================
 // CONVERT BASE64 IMAGE INTO BLOB
 // ==========================================
 
 function dataUrlToBlob(dataUrl: string): Blob {
+  if (typeof dataUrl !== "string") {
+    throw new Error("Invalid image data.");
+  }
+
   const match = dataUrl.match(
     /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/
   );
@@ -38,16 +49,19 @@ function dataUrlToBlob(dataUrl: string): Blob {
     throw new Error("Invalid JPEG image data.");
   }
 
-  const estimatedSize =
-    Math.floor((match[1].length * 3) / 4);
+  const base64 = match[1];
+
+  const estimatedSize = Math.floor(
+    (base64.length * 3) / 4
+  );
 
   if (estimatedSize > MAX_IMAGE_SIZE + 2) {
     throw new Error(
-      "Each diagram must be 2 MB or smaller."
+      "Each processed image must be 2 MB or smaller."
     );
   }
 
-  const binary = atob(match[1]);
+  const binary = atob(base64);
 
   const bytes = new Uint8Array(binary.length);
 
@@ -73,32 +87,99 @@ function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 // ==========================================
-// UPLOAD REVIEWER DIAGRAMS
+// VALIDATE AND PREPARE IMAGE BATCH
+// ==========================================
+
+function prepareReviewerVisuals(
+  visuals: ReviewerVisual[]
+): PreparedVisual[] {
+  if (!Array.isArray(visuals)) {
+    throw new Error("Invalid reviewer visuals.");
+  }
+
+  if (visuals.length > MAX_REVIEWER_IMAGES) {
+    throw new Error(
+      `Maximum of ${MAX_REVIEWER_IMAGES} images per reviewer.`
+    );
+  }
+
+  const sortedVisuals = [...visuals].sort(
+    (a, b) => a.pageNumber - b.pageNumber
+  );
+
+  const seenPages = new Set<number>();
+
+  const prepared: PreparedVisual[] = [];
+
+  let totalSize = 0;
+
+  for (const visual of sortedVisuals) {
+    if (
+      !visual ||
+      !Number.isInteger(visual.pageNumber) ||
+      visual.pageNumber < 1 ||
+      visual.pageNumber > MAX_REVIEWER_IMAGES ||
+      visual.mimeType !== "image/jpeg"
+    ) {
+      throw new Error(
+        "Invalid reviewer image information."
+      );
+    }
+
+    if (seenPages.has(visual.pageNumber)) {
+      throw new Error(
+        `Duplicate image page ${visual.pageNumber}.`
+      );
+    }
+
+    seenPages.add(visual.pageNumber);
+
+    const blob = dataUrlToBlob(visual.dataUrl);
+
+    totalSize += blob.size;
+
+    if (totalSize > MAX_TOTAL_IMAGE_SIZE) {
+      throw new Error(
+        "Combined processed images must be 30 MB or smaller."
+      );
+    }
+
+    prepared.push({
+      pageNumber: visual.pageNumber,
+      blob,
+    });
+  }
+
+  return prepared;
+}
+
+// ==========================================
+// UPLOAD REVIEWER IMAGES
 // ==========================================
 
 export async function uploadReviewerVisuals(
   reviewerId: string,
   visuals: ReviewerVisual[]
 ): Promise<UploadedReviewerVisual[]> {
-  if (!reviewerId.trim() || reviewerId.includes("/")) {
+  if (
+    typeof reviewerId !== "string" ||
+    !reviewerId.trim() ||
+    reviewerId.includes("/")
+  ) {
     throw new Error("Invalid reviewer ID.");
   }
 
-  if (!Array.isArray(visuals)) {
-    throw new Error("Invalid reviewer visuals.");
-  }
+  // Validate all images before uploading.
+  const prepared = prepareReviewerVisuals(visuals);
 
-  if (visuals.length === 0) {
+  if (prepared.length === 0) {
     return [];
   }
 
-  if (visuals.length > MAX_IMAGES) {
-    throw new Error(
-      "Maximum of 3 diagrams per reviewer."
-    );
-  }
+  // ========================================
+  // AUTHENTICATION
+  // ========================================
 
-  // Get authenticated user
   const {
     data: { user },
     error: authError,
@@ -106,29 +187,18 @@ export async function uploadReviewerVisuals(
 
   if (authError || !user) {
     throw new Error(
-      "Please log in to upload reviewer diagrams."
+      "Please log in to upload reviewer images."
     );
   }
 
   const uploaded: UploadedReviewerVisual[] = [];
 
+  // ========================================
+  // UPLOAD IMAGES
+  // ========================================
+
   try {
-    for (const visual of visuals) {
-      if (
-        !Number.isInteger(visual.pageNumber) ||
-        visual.pageNumber < 1 ||
-        visual.mimeType !== "image/jpeg"
-      ) {
-        throw new Error(
-          "Invalid diagram information."
-        );
-      }
-
-      const imageBlob = dataUrlToBlob(
-        visual.dataUrl
-      );
-
-      // User ID / Reviewer ID / Image
+    for (const visual of prepared) {
       const path =
         `${user.id}/${reviewerId}/` +
         `page-${visual.pageNumber}-` +
@@ -136,7 +206,7 @@ export async function uploadReviewerVisuals(
 
       const { error } = await supabase.storage
         .from(BUCKET)
-        .upload(path, imageBlob, {
+        .upload(path, visual.blob, {
           contentType: "image/jpeg",
           upsert: false,
           cacheControl: "3600",
@@ -144,7 +214,7 @@ export async function uploadReviewerVisuals(
 
       if (error) {
         throw new Error(
-          `Diagram upload failed: ${error.message}`
+          `Page ${visual.pageNumber} upload failed: ${error.message}`
         );
       }
 
@@ -156,8 +226,10 @@ export async function uploadReviewerVisuals(
 
     return uploaded;
   } catch (error) {
-    // Remove images uploaded in this attempt
-    // to avoid leaving incomplete uploads.
+    // ======================================
+    // CLEAN UP PARTIAL UPLOADS
+    // ======================================
+
     if (uploaded.length > 0) {
       const paths = uploaded.map(
         (item) => item.storagePath

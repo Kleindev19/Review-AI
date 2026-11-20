@@ -220,7 +220,7 @@ function Sidebar() {
 
           <div className="study-brand-info">
             <strong>StudyRoom</strong>
-            <span>Your study workspace</span>
+            
           </div>
         </NavLink>
       </div>

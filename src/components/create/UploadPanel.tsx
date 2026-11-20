@@ -15,8 +15,16 @@ import {
   Check,
   FileText,
   FileUp,
+  Images,
   Loader2,
+  Plus,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
+
+// ==========================================
+// TYPES
+// ==========================================
 
 type VisualPage = {
   pageNumber: number;
@@ -41,25 +49,76 @@ type UploadStatus =
   | "saving"
   | "ready";
 
-const ALLOWED = [
+type PickMode = "replace" | "append";
+
+// ==========================================
+// CONFIGURATION
+// ==========================================
+
+const ALLOWED = new Set([
   "pdf",
   "docx",
   "txt",
   "jpg",
   "jpeg",
   "png",
-];
+]);
+
+const IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+]);
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
+const MAX_IMAGE_FILES = 30;
+const MAX_IMAGE_BATCH_SIZE = 60 * 1024 * 1024;
 
 const STEPS = [
-  "Choose file",
+  "Choose files",
   "Process content",
   "Ready to generate",
 ];
 
+const filenameSorter = new Intl.Collator(
+  undefined,
+  {
+    numeric: true,
+    sensitivity: "base",
+  }
+);
+
+// ==========================================
+// HELPERS
+// ==========================================
+
+function getExtension(file: File): string {
+  return (
+    file.name
+      .split(".")
+      .pop()
+      ?.toLowerCase() ?? ""
+  );
+}
+
+function isImageFile(file: File): boolean {
+  return IMAGE_EXTENSIONS.has(
+    getExtension(file)
+  );
+}
+
+function isSameFile(a: File, b: File): boolean {
+  return (
+    a.name === b.name &&
+    a.size === b.size &&
+    a.lastModified === b.lastModified
+  );
+}
+
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
 
   if (bytes < 1024 * 1024) {
     return `${(bytes / 1024).toFixed(1)} KB`;
@@ -68,19 +127,26 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-async function extractPdf(file: File): Promise<string> {
+// ==========================================
+// PDF TEXT EXTRACTION
+// ==========================================
+
+async function extractPdf(
+  file: File
+): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
 
   const worker = await import(
     "pdfjs-dist/build/pdf.worker.min.mjs?url"
   );
 
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-
-  const buffer = await file.arrayBuffer();
+  pdfjs.GlobalWorkerOptions.workerSrc =
+    worker.default;
 
   const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(buffer),
+    data: new Uint8Array(
+      await file.arrayBuffer()
+    ),
   });
 
   const pdf = await loadingTask.promise;
@@ -92,16 +158,22 @@ async function extractPdf(file: File): Promise<string> {
       pageNumber <= pdf.numPages;
       pageNumber++
     ) {
-      const page = await pdf.getPage(pageNumber);
+      const page = await pdf.getPage(
+        pageNumber
+      );
 
       try {
-        const content = await page.getTextContent();
+        const content =
+          await page.getTextContent();
+
         let pageText = "";
 
         for (const item of content.items) {
           if ("str" in item) {
             pageText += item.str;
-            pageText += item.hasEOL ? "\n" : " ";
+            pageText += item.hasEOL
+              ? "\n"
+              : " ";
           }
         }
 
@@ -119,170 +191,654 @@ async function extractPdf(file: File): Promise<string> {
   return pages.join("\n\n");
 }
 
-async function extractDocx(file: File): Promise<string> {
+// ==========================================
+// DOCX TEXT EXTRACTION
+// ==========================================
+
+async function extractDocx(
+  file: File
+): Promise<string> {
   const mammoth = await import("mammoth");
 
-  const result = await mammoth.extractRawText({
-    arrayBuffer: await file.arrayBuffer(),
-  });
+  const result =
+    await mammoth.extractRawText({
+      arrayBuffer:
+        await file.arrayBuffer(),
+    });
 
   return result.value;
 }
 
+// ==========================================
+// UPLOAD PANEL
+// ==========================================
+
 export default function UploadPanel({
   onReady,
 }: UploadPanelProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  // Main picker accepts all supported files.
+  // Add picker accepts images only.
+
+  const replaceInputRef =
+    useRef<HTMLInputElement>(null);
+
+  const addInputRef =
+    useRef<HTMLInputElement>(null);
+
   const processingRef = useRef(false);
+
+  // Preserve selected files between
+  // consecutive file-picker selections.
+
+  const filesRef = useRef<File[]>([]);
+
+  const readyResultRef =
+    useRef<UploadResult | null>(null);
+
+  // ========================================
+  // STATES
+  // ========================================
 
   const [status, setStatus] =
     useState<UploadStatus>("idle");
 
-  const [file, setFile] = useState<File | null>(null);
-  const [characters, setCharacters] = useState(0);
-  const [visualCount, setVisualCount] = useState(0);
-  const [error, setError] = useState("");
-  const [dragging, setDragging] = useState(false);
+  const [files, setFiles] =
+    useState<File[]>([]);
+
+  const [characters, setCharacters] =
+    useState(0);
+
+  const [visualCount, setVisualCount] =
+    useState(0);
+
+  const [processedImages, setProcessedImages] =
+    useState(0);
+
+  const [error, setError] =
+    useState("");
+
+  const [dragging, setDragging] =
+    useState(false);
 
   const busy =
     status === "reading" ||
     status === "saving";
 
-  async function processFile(picked?: File) {
-    if (!picked || processingRef.current) return;
+  const imageSelection =
+    files.length > 0 &&
+    files.every(isImageFile);
 
-    onReady(null);
-    setFile(null);
-    setCharacters(0);
-    setVisualCount(0);
+  const totalSize = files.reduce(
+    (sum, file) => sum + file.size,
+    0
+  );
+
+  // ========================================
+  // UPDATE SELECTED FILES
+  // ========================================
+
+  function updateFiles(next: File[]) {
+    filesRef.current = next;
+    setFiles(next);
+  }
+
+  // ========================================
+  // PROCESS FILES
+  // REPLACE OR APPEND MODE
+  // ========================================
+
+  async function processFiles(
+    pickedFiles: File[],
+    mode: PickMode
+  ) {
+    if (
+      !pickedFiles.length ||
+      processingRef.current
+    ) {
+      return;
+    }
+
     setError("");
-    setStatus("idle");
 
-    const extension =
-      picked.name.split(".").pop()?.toLowerCase() ?? "";
+    // ======================================
+    // MERGE IMAGES WHEN APPENDING
+    // ======================================
 
-    if (!ALLOWED.includes(extension)) {
+    let selected =
+      mode === "append"
+        ? [...filesRef.current]
+        : [];
+
+    let added = 0;
+
+    for (const file of pickedFiles) {
+      // Prevent duplicate files when adding.
+
+      if (
+        mode === "append" &&
+        selected.some((item) =>
+          isSameFile(item, file)
+        )
+      ) {
+        continue;
+      }
+
+      selected.push(file);
+      added++;
+    }
+
+    if (added === 0) {
       setError(
-        "Only PDF, DOCX, TXT, JPG and PNG files are supported."
+        "Those images are already selected. Choose different images."
       );
       return;
     }
 
-    if (picked.size > MAX_FILE_SIZE) {
-      setError("File must be 15 MB or smaller.");
+    // ======================================
+    // VALIDATE FILE TYPES
+    // ======================================
+
+    const unsupported = selected.find(
+      (file) =>
+        !ALLOWED.has(getExtension(file))
+    );
+
+    if (unsupported) {
+      setError(
+        `Unsupported file: ${unsupported.name}. Use PDF, DOCX, TXT, JPG or PNG.`
+      );
       return;
     }
 
-    if (picked.size === 0) {
-      setError("The selected file is empty.");
+    // Documents can only be selected
+    // one at a time.
+
+    if (
+      selected.length > 1 &&
+      !selected.every(isImageFile)
+    ) {
+      setError(
+        "Only JPG/PNG images can be uploaded together. Choose PDF, DOCX or TXT by itself."
+      );
       return;
     }
+
+    // ======================================
+    // MAXIMUM IMAGE COUNT
+    // ======================================
+
+    if (
+      selected.length > MAX_IMAGE_FILES
+    ) {
+      setError(
+        `You can upload a maximum of ${MAX_IMAGE_FILES} images per reviewer. You currently selected ${selected.length}.`
+      );
+      return;
+    }
+
+    // ======================================
+    // EMPTY FILE PROTECTION
+    // ======================================
+
+    const empty = selected.find(
+      (file) => file.size === 0
+    );
+
+    if (empty) {
+      setError(
+        `${empty.name} is empty.`
+      );
+      return;
+    }
+
+    // ======================================
+    // PER-FILE SIZE LIMIT
+    // ======================================
+
+    const oversized = selected.find(
+      (file) =>
+        file.size > MAX_FILE_SIZE
+    );
+
+    if (oversized) {
+      setError(
+        `${oversized.name} exceeds the 15 MB per-file limit.`
+      );
+      return;
+    }
+
+    // ======================================
+    // TOTAL IMAGE BATCH LIMIT
+    // ======================================
+
+    const selectedBytes = selected.reduce(
+      (sum, file) =>
+        sum + file.size,
+      0
+    );
+
+    if (
+      selected.every(isImageFile) &&
+      selectedBytes > MAX_IMAGE_BATCH_SIZE
+    ) {
+      setError(
+        "Total image size must not exceed 60 MB."
+      );
+      return;
+    }
+
+    // ======================================
+    // SORT IMAGES BY FILENAME
+    // ======================================
+
+    if (selected.every(isImageFile)) {
+      selected = selected.sort(
+        (a, b) =>
+          filenameSorter.compare(
+            a.name,
+            b.name
+          )
+      );
+    }
+
+    const firstFile = selected[0];
+
+    if (!firstFile) {
+      return;
+    }
+
+    // ======================================
+    // SAVE PREVIOUS SUCCESSFUL RESULT
+    // ======================================
+
+    // If processing a new image fails,
+    // restore the previous valid upload.
+
+    const previousFiles = [
+      ...filesRef.current,
+    ];
+
+    const previousResult =
+      readyResultRef.current;
+
+    const previousCharacters =
+      characters;
+
+    const previousVisualCount =
+      visualCount;
+
+    // ======================================
+    // BEGIN PROCESSING
+    // ======================================
 
     processingRef.current = true;
-    setFile(picked);
+    readyResultRef.current = null;
+
+    onReady(null);
+
+    updateFiles(selected);
+
+    setCharacters(0);
+    setVisualCount(0);
+    setProcessedImages(0);
+
     setStatus("reading");
 
     try {
       let text = "";
-      let visuals: VisualPage[] = [];
+
+      let visuals:
+        VisualPage[] = [];
+
+      const extension =
+        getExtension(firstFile);
+
+      // ====================================
+      // PDF
+      // ====================================
 
       if (extension === "pdf") {
-        text = await extractPdf(picked);
+        text = await extractPdf(
+          firstFile
+        );
 
-        visuals = await extractPdfVisuals(picked);
-      } else if (extension === "docx") {
-        text = await extractDocx(picked);
-      } else if (extension === "txt") {
-        text = await picked.text();
-      } else {
-        const image = await extractImageVisual(picked);
-
-        visuals = [
-          {
-            pageNumber: 1,
-            mimeType: image.mimeType,
-            dataUrl: image.dataUrl,
-          },
-        ];
+        visuals =
+          await extractPdfVisuals(
+            firstFile
+          );
       }
 
-      text = text.trim();
+      // ====================================
+      // DOCX
+      // ====================================
 
-      if (!text && visuals.length === 0) {
-        throw new Error(
-          "No readable content found in this file."
+      else if (extension === "docx") {
+        text = await extractDocx(
+          firstFile
         );
       }
 
-      setStatus("saving");
+      // ====================================
+      // TXT
+      // ====================================
+
+      else if (extension === "txt") {
+        text = await firstFile.text();
+      }
+
+      // ====================================
+      // SINGLE OR MULTIPLE IMAGES
+      // ====================================
+
+      else {
+        const images:
+          VisualPage[] = [];
+
+        for (
+          let i = 0;
+          i < selected.length;
+          i++
+        ) {
+          const imageFile =
+            selected[i];
+
+          if (!imageFile) {
+            continue;
+          }
+
+          const image =
+            await extractImageVisual(
+              imageFile
+            );
+
+          images.push({
+            pageNumber: i + 1,
+            mimeType:
+              image.mimeType,
+            dataUrl:
+              image.dataUrl,
+          });
+
+          setProcessedImages(i + 1);
+        }
+
+        visuals = images;
+      }
+
+      // ====================================
+      // VALIDATE EXTRACTED CONTENT
+      // ====================================
+
+      text = text.trim();
+
+      if (
+        !text &&
+        visuals.length === 0
+      ) {
+        throw new Error(
+          "No readable content was found in the selected files."
+        );
+      }
+
+      // ====================================
+      // SAVE EXTRACTED TEXT MATERIAL
+      // ====================================
+
+      
+      // ====================================
+      // SAVE MATERIAL TO INDEXEDDB
+      // ====================================
 
       let materialId: string | null = null;
 
-      // Preserve existing local saving for text materials.
-      // Visual-only storage will be added later.
-      if (text) {
+      // A scanned PDF can contain images
+      // even when extracted text is empty.
+      //
+      // Save the original single file when
+      // it has readable text or visual pages.
+      //
+      // Image batches are handled separately
+      // because each image is a different file.
+
+      const hasReadableContent =
+        text.length > 0 ||
+        visuals.length > 0;
+
+      if (
+        selected.length === 1 &&
+        hasReadableContent
+      ) {
+        setStatus("saving");
+
         const material = await saveMaterial(
-          picked,
+          firstFile,
           text
         );
 
         materialId = material.id;
       }
 
-      setCharacters(text.length);
-      setVisualCount(visuals.length);
-      setStatus("ready");
 
-      onReady({
+      // ====================================
+      // SOURCE LABEL
+      // ====================================
+
+      const sourceLabel =
+        selected.length === 1
+          ? firstFile.name
+          : `${selected.length} images (${firstFile.name} - ${
+              selected[
+                selected.length - 1
+              ]?.name ?? firstFile.name
+            })`;
+
+      // ====================================
+      // PREPARE UPLOAD RESULT
+      // ====================================
+
+      const result:
+        UploadResult = {
         text,
-        sourceLabel: picked.name,
+        sourceLabel,
         materialId,
         visuals,
-      });
-    } catch (err) {
-      console.error("File processing failed:", err);
+      };
 
-      setStatus("idle");
+      readyResultRef.current =
+        result;
+
+      setCharacters(
+        text.length
+      );
+
+      setVisualCount(
+        visuals.length
+      );
+
+      setStatus("ready");
+
+      onReady(result);
+    } catch (err) {
+      console.error(
+        "File processing failed:",
+        err
+      );
 
       setError(
         err instanceof Error
           ? err.message
-          : "The file could not be processed."
+          : "The selected files could not be processed."
       );
+
+      // ====================================
+      // RESTORE PREVIOUS RESULT
+      // ====================================
+
+      if (previousResult) {
+        readyResultRef.current =
+          previousResult;
+
+        updateFiles(
+          previousFiles
+        );
+
+        setCharacters(
+          previousCharacters
+        );
+
+        setVisualCount(
+          previousVisualCount
+        );
+
+        setStatus("ready");
+
+        onReady(
+          previousResult
+        );
+      } else {
+        updateFiles([]);
+
+        setCharacters(0);
+        setVisualCount(0);
+
+        setStatus("idle");
+
+        onReady(null);
+      }
     } finally {
       processingRef.current = false;
     }
   }
 
-  function handlePick(
+  // ========================================
+  // MAIN FILE PICKER - REPLACE FILES
+  // ========================================
+
+  function handleReplace(
     event: ChangeEvent<HTMLInputElement>
   ) {
-    const picked = event.target.files?.[0];
+    const picked = Array.from(
+      event.target.files ?? []
+    );
 
     event.target.value = "";
-    void processFile(picked);
+
+    void processFiles(
+      picked,
+      "replace"
+    );
   }
+
+  // ========================================
+  // ADD MORE IMAGES - APPEND FILES
+  // ========================================
+
+  function handleAddImages(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const picked = Array.from(
+      event.target.files ?? []
+    );
+
+    event.target.value = "";
+
+    void processFiles(
+      picked,
+      "append"
+    );
+  }
+
+  // ========================================
+  // DRAG AND DROP
+  // ========================================
 
   function handleDrop(
     event: DragEvent<HTMLDivElement>
   ) {
     event.preventDefault();
+
     setDragging(false);
 
-    if (!busy) {
-      void processFile(event.dataTransfer.files[0]);
+    if (processingRef.current) {
+      return;
     }
+
+    const picked = Array.from(
+      event.dataTransfer.files
+    );
+
+    // Append dropped images if
+    // current selection is also images.
+
+    const append =
+      filesRef.current.length > 0 &&
+      filesRef.current.every(
+        isImageFile
+      ) &&
+      picked.every(
+        isImageFile
+      );
+
+    void processFiles(
+      picked,
+      append
+        ? "append"
+        : "replace"
+    );
   }
+
+  // ========================================
+  // CLEAR SELECTION
+  // ========================================
+
+  function clearSelection() {
+    if (processingRef.current) {
+      return;
+    }
+
+    readyResultRef.current = null;
+
+    updateFiles([]);
+
+    setCharacters(0);
+    setVisualCount(0);
+    setProcessedImages(0);
+
+    setError("");
+    setStatus("idle");
+
+    onReady(null);
+  }
+
+  // ========================================
+  // UI PROGRESS
+  // ========================================
 
   const activeStep =
     status === "ready"
       ? 2
-      : status === "reading" || status === "saving"
+      : busy
         ? 1
         : 0;
 
+  const progress =
+    imageSelection &&
+    files.length > 0
+      ? (processedImages /
+          files.length) *
+        100
+      : 0;
+
+  // ========================================
+  // RENDER
+  // ========================================
+
   return (
     <div className="space-y-4">
+      {/* ====================================
+          UPLOAD AREA
+      ==================================== */}
+
       <div
         onDragOver={(event) => {
           event.preventDefault();
@@ -291,7 +847,9 @@ export default function UploadPanel({
             setDragging(true);
           }
         }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={() =>
+          setDragging(false)
+        }
         onDrop={handleDrop}
         className={`rounded-xl border border-dashed px-5 py-9 text-center transition-colors ${
           dragging
@@ -301,14 +859,35 @@ export default function UploadPanel({
               : "border-border bg-background/40"
         }`}
       >
+        {/* MAIN FILE PICKER */}
+
         <input
-          ref={inputRef}
+          ref={replaceInputRef}
           id="material-file"
           type="file"
           accept=".pdf,.docx,.txt,.jpg,.jpeg,.png"
-          onChange={handlePick}
+          multiple
+          onChange={handleReplace}
+          disabled={busy}
           className="sr-only"
         />
+
+        {/* ADD MORE IMAGES PICKER */}
+
+        <input
+          ref={addInputRef}
+          id="material-images-add"
+          type="file"
+          accept=".jpg,.jpeg,.png"
+          multiple
+          onChange={handleAddImages}
+          disabled={busy}
+          className="sr-only"
+        />
+
+        {/* ==================================
+            STATUS ICON
+        ================================== */}
 
         <span
           className={`mx-auto grid h-11 w-11 place-items-center rounded-lg border ${
@@ -321,95 +900,241 @@ export default function UploadPanel({
             <Check className="h-5 w-5" />
           ) : busy ? (
             <Loader2 className="h-5 w-5 animate-spin" />
+          ) : imageSelection ? (
+            <Images className="h-5 w-5" />
           ) : (
             <FileUp className="h-5 w-5" />
           )}
         </span>
 
+        {/* ==================================
+            SELECTED FILES
+        ================================== */}
+
         <div className="mt-3">
-          {file ? (
+          {files.length > 1 ? (
+            <>
+              <p className="text-[13.5px] font-medium text-foreground">
+                {files.length} images selected
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {files[0]?.name} to{" "}
+                {
+                  files[
+                    files.length - 1
+                  ]?.name
+                }
+              </p>
+            </>
+          ) : files.length === 1 ? (
             <p className="flex items-center justify-center gap-2 text-[13.5px] font-medium text-foreground">
               <FileText className="h-4 w-4 shrink-0" />
-              <span className="truncate">{file.name}</span>
+
+              <span className="truncate">
+                {files[0]?.name}
+              </span>
             </p>
           ) : (
             <p className="text-[13.5px] font-medium text-foreground">
-              Drop your file here
+              Drop your files here
             </p>
           )}
         </div>
 
+        {/* ==================================
+            FILE DETAILS
+        ================================== */}
+
         <p className="mt-2 text-xs text-muted-foreground">
-          {status === "reading"
-            ? "Processing document and visuals..."
-            : status === "saving"
-              ? "Saving extracted content..."
-              : status === "ready" && file
-                ? `${formatBytes(file.size)} · ${characters.toLocaleString()} characters · ${visualCount} visual pages`
-                : "PDF, DOCX, TXT, JPG or PNG · up to 15 MB"}
+          {status === "reading" &&
+          imageSelection
+            ? `Processing image ${processedImages} of ${files.length}...`
+            : status === "reading"
+              ? "Processing document and visuals..."
+              : status === "saving"
+                ? "Saving extracted content..."
+                : status === "ready"
+                  ? `${formatBytes(totalSize)} · ${characters.toLocaleString()} characters · ${visualCount} visual pages`
+                  : "PDF, DOCX, TXT, or up to 30 JPG/PNG images"}
         </p>
 
-        <div className="mt-4 flex items-center justify-center gap-2">
+        {/* ==================================
+            IMAGE PROCESSING PROGRESS
+        ================================== */}
+
+        {busy && imageSelection && (
+          <div className="mx-auto mt-4 max-w-xs">
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{
+                  width: `${progress}%`,
+                }}
+              />
+            </div>
+
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {Math.round(
+                progress
+              )}
+              % of images processed
+            </p>
+          </div>
+        )}
+
+        {/* ==================================
+            UPLOAD BUTTONS
+        ================================== */}
+
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          {/* BROWSE / REPLACE */}
+
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
+            onClick={() =>
+              replaceInputRef.current?.click()
+            }
             disabled={busy}
-            className="btn btn-secondary btn-sm"
+            className="btn btn-secondary btn-sm disabled:opacity-50"
           >
-            {file ? "Choose another file" : "Browse files"}
+            {files.length > 0 ? (
+              <>
+                <RotateCcw className="h-3.5 w-3.5" />
+                Replace files
+              </>
+            ) : (
+              <>
+                <FileUp className="h-3.5 w-3.5" />
+                Browse files
+              </>
+            )}
           </button>
 
-          {status === "ready" && (
-            <span className="text-xs text-muted-foreground">
-              File processed
-            </span>
+          {/* ADD IMAGES */}
+
+          {imageSelection &&
+            files.length <
+              MAX_IMAGE_FILES && (
+              <button
+                type="button"
+                onClick={() =>
+                  addInputRef.current?.click()
+                }
+                disabled={busy}
+                className="btn btn-secondary btn-sm disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add more images
+              </button>
+            )}
+
+          {/* CLEAR */}
+
+          {files.length > 0 && (
+            <button
+              type="button"
+              onClick={
+                clearSelection
+              }
+              disabled={busy}
+              className="btn btn-ghost btn-sm disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear
+            </button>
           )}
         </div>
+
+        {/* ==================================
+            READY MESSAGE
+        ================================== */}
+
+        {status === "ready" && (
+          <p
+            className="mt-3 text-xs text-muted-foreground"
+            role="status"
+          >
+            Files processed.{" "}
+            {imageSelection
+              ? "Add more images or generate your reviewer."
+              : "Ready to generate your reviewer."}
+          </p>
+        )}
+
+        {/* ==================================
+            IMAGE COUNT
+        ================================== */}
+
+        {imageSelection &&
+          files.length > 0 && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {files.length}/{MAX_IMAGE_FILES} images
+              {" · "}
+              Select several at once using Ctrl/Shift,
+              or add them one by one.
+            </p>
+          )}
       </div>
+
+      {/* ====================================
+          UPLOAD STEPS
+      ==================================== */}
 
       {status !== "idle" && (
         <ol className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
-          {STEPS.map((label, index) => {
-            const done =
-              status === "ready" || index < activeStep;
+          {STEPS.map(
+            (label, stepIndex) => {
+              const done =
+                status === "ready" ||
+                stepIndex <
+                  activeStep;
 
-            const active =
-              status !== "ready" &&
-              index === activeStep;
+              const active =
+                status !== "ready" &&
+                stepIndex ===
+                  activeStep;
 
-            return (
-              <li
-                key={label}
-                className="flex items-center gap-1.5 text-xs"
-              >
-                <span
-                  className={`grid h-4 w-4 place-items-center rounded-full border ${
-                    done
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : active
-                        ? "border-primary/60 text-primary"
-                        : "border-border text-muted-foreground"
-                  }`}
+              return (
+                <li
+                  key={label}
+                  className="flex items-center gap-1.5 text-xs"
                 >
-                  {done ? (
-                    <Check className="h-2.5 w-2.5" />
-                  ) : active ? (
-                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                  ) : null}
-                </span>
+                  <span
+                    className={`grid h-4 w-4 place-items-center rounded-full border ${
+                      done
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : active
+                          ? "border-primary/60 text-primary"
+                          : "border-border text-muted-foreground"
+                    }`}
+                  >
+                    {done ? (
+                      <Check className="h-2.5 w-2.5" />
+                    ) : active ? (
+                      <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                    ) : null}
+                  </span>
 
-                <span className={
-                  done || active
-                    ? "text-foreground/85"
-                    : "text-muted-foreground"
-                }>
-                  {label}
-                </span>
-              </li>
-            );
-          })}
+                  <span
+                    className={
+                      done || active
+                        ? "text-foreground/85"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    {label}
+                  </span>
+                </li>
+              );
+            }
+          )}
         </ol>
       )}
+
+      {/* ====================================
+          ERROR MESSAGE
+      ==================================== */}
 
       {error && (
         <p
@@ -417,6 +1142,7 @@ export default function UploadPanel({
           className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-[13px] text-destructive"
         >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+
           <span>{error}</span>
         </p>
       )}

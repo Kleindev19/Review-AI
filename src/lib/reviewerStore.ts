@@ -3,6 +3,7 @@ import { supabase } from "./supabaseClient";
 
 import {
   uploadReviewerVisuals,
+  MAX_REVIEWER_IMAGES,
   type ReviewerVisual,
 } from "./reviewerVisualStorage";
 
@@ -14,12 +15,14 @@ export type CreateReviewerInput = {
   title: string;
   subject: string;
   content: string;
+
   sourceType: "upload" | "text";
   sourceLabel: string;
   sourceId: string | null;
+
   isAiGenerated: boolean;
 
-  // Optional uploaded graphs and diagrams
+  // Optional graphs, diagrams, and image pages.
   visuals?: ReviewerVisual[];
 };
 
@@ -30,7 +33,28 @@ export type CreateReviewerInput = {
 export async function createReviewer(
   input: CreateReviewerInput
 ): Promise<string> {
-  // Get authenticated user
+  const visuals = input.visuals ?? [];
+
+  // ========================================
+  // VALIDATE VISUAL COUNT
+  // ========================================
+
+  if (!Array.isArray(visuals)) {
+    throw new Error(
+      "Invalid reviewer image collection."
+    );
+  }
+
+  if (visuals.length > MAX_REVIEWER_IMAGES) {
+    throw new Error(
+      `Maximum of ${MAX_REVIEWER_IMAGES} images per reviewer.`
+    );
+  }
+
+  // ========================================
+  // AUTHENTICATION
+  // ========================================
+
   const {
     data: { user },
     error: authError,
@@ -42,7 +66,10 @@ export async function createReviewer(
     );
   }
 
-  // Step 1: Create the reviewer record
+  // ========================================
+  // STEP 1: CREATE REVIEWER RECORD
+  // ========================================
+
   const { data, error } = await supabase
     .from("reviewers")
     .insert({
@@ -64,17 +91,21 @@ export async function createReviewer(
 
   const reviewerId: string = data.id;
 
-  const visuals = input.visuals ?? [];
+  // ========================================
+  // TEXT-ONLY REVIEWER
+  // ========================================
 
-  // No images? Text-only reviewer is complete.
   if (visuals.length === 0) {
     return reviewerId;
   }
 
   let uploadedPaths: string[] = [];
 
+  // ========================================
+  // STEP 2: UPLOAD REVIEWER IMAGES
+  // ========================================
+
   try {
-    // Step 2: Upload original diagrams
     const uploaded = await uploadReviewerVisuals(
       reviewerId,
       visuals
@@ -84,7 +115,10 @@ export async function createReviewer(
       (visual) => visual.storagePath
     );
 
-    // Step 3: Link diagrams to reviewer
+    // ======================================
+    // STEP 3: LINK IMAGES TO REVIEWER
+    // ======================================
+
     const imageRecords = uploaded.map(
       (visual) => ({
         reviewer_id: reviewerId,
@@ -100,11 +134,14 @@ export async function createReviewer(
 
     if (imageError) {
       throw new Error(
-        `Could not save reviewer diagrams: ${imageError.message}`
+        `Could not save reviewer images: ${imageError.message}`
       );
     }
 
-    // Everything saved successfully
+    // ======================================
+    // SAVE SUCCESS
+    // ======================================
+
     return reviewerId;
   } catch (saveError) {
     console.error(
@@ -112,7 +149,10 @@ export async function createReviewer(
       saveError
     );
 
-    // Remove uploaded images if linking fails
+    // ======================================
+    // REMOVE UPLOADED IMAGES ON FAILURE
+    // ======================================
+
     if (uploadedPaths.length > 0) {
       const { error: cleanupError } =
         await supabase.storage
@@ -127,9 +167,10 @@ export async function createReviewer(
       }
     }
 
-    // Best-effort rollback of incomplete reviewer.
-    // Requires an existing DELETE RLS policy
-    // allowing the user to delete their reviewer.
+    // ======================================
+    // ROLLBACK INCOMPLETE REVIEWER
+    // ======================================
+
     const { error: rollbackError } =
       await supabase
         .from("reviewers")
