@@ -1,5 +1,4 @@
 
-import { useQuizTabDetection } from "../../hooks/useQuizTabDetection";
 import {
   useEffect,
   useState,
@@ -438,26 +437,6 @@ export default function QuizPage() {
       )
     : 0;
 
-  // ==========================================
-  // TAB-SWITCH DETECTION (WARNING ONLY)
-  // ==========================================
-
-  const quizDetectionEnabled =
-    Boolean(quiz) &&
-    !loading &&
-    !result &&
-    !busy &&
-    !editorOpen &&
-    questions.length > 0;
-
-  const {
-    tabSwitchCount,
-    resetTabSwitchCount,
-  } = useQuizTabDetection(
-    quizDetectionEnabled,
-    quizId
-  );
-
   function setAnswer(
     questionId: string,
     value: string
@@ -837,7 +816,7 @@ export default function QuizPage() {
           } unanswered question(s). Submit anyway?`
         );
 
-        if (!confirmed) return;
+      if (!confirmed) return;
     }
 
     setBusy(true);
@@ -1019,7 +998,6 @@ export default function QuizPage() {
   // ==========================================
 
   function retakeQuiz() {
-    resetTabSwitchCount();
     setAnswers({});
     setResult(null);
     setResultSaveNote("");
@@ -1108,13 +1086,6 @@ export default function QuizPage() {
               }}
             />
           </div>
-
-          {tabSwitchCount > 0 && (
-            <p className="mt-4 text-xs text-amber-700 dark:text-amber-300">
-              Tab switches during this attempt:
-              {" "}{tabSwitchCount} (not counted in your score)
-            </p>
-          )}
 
           {/* SAVE STATUS */}
 
@@ -1265,33 +1236,6 @@ export default function QuizPage() {
             : ""}
         </p>
       </header>
-
-      {/* ======================================
-          TAB-SWITCH WARNING (WARNING ONLY)
-      ====================================== */}
-
-      {tabSwitchCount > 0 && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-4"
-        >
-          <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
-            Tab switch detected
-          </p>
-
-          <p className="mt-1 text-xs text-foreground">
-            You left the quiz screen. Tab switches
-            recorded: {tabSwitchCount}
-          </p>
-
-          <p className="mt-2 text-xs text-muted-foreground">
-            Stay on the quiz screen to avoid
-            additional warnings. This does not
-            affect your score.
-          </p>
-        </div>
-      )}
 
       {/* ======================================
           OFFLINE DOWNLOAD SECTION
