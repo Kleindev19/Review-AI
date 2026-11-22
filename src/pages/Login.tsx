@@ -1,14 +1,25 @@
 
-import { useEffect, useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+  useEffect,
+  useState,
+  type FormEvent,
+} from "react";
 
 import {
-  Mail,
-  LockKeyhole,
-  Eye,
-  EyeOff,
+  Link,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+
+import {
   ArrowRight,
   BookOpen,
+  Eye,
+  EyeOff,
+  Loader2,
+  LockKeyhole,
+  Mail,
+  Sparkles,
   UserRound,
 } from "lucide-react";
 
@@ -20,29 +31,70 @@ export default function Login() {
 
   const isRegister = pathname === "/register";
 
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  // ========================================
+  // FORM STATES
+  // ========================================
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [displayName, setDisplayName] =
+    useState("");
 
-  const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [email, setEmail] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
+
+  const [confirmPassword, setConfirmPassword] =
+    useState("");
+
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] = useState(false);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [resending, setResending] =
+    useState(false);
+
+  const [
+    needsConfirmation,
+    setNeedsConfirmation,
+  ] = useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState("");
+
+  const [successMessage, setSuccessMessage] =
+    useState("");
+
+  // ========================================
+  // RESET STATES WHEN SWITCHING PAGES
+  // ========================================
 
   useEffect(() => {
     setPassword("");
     setConfirmPassword("");
+
     setShowPassword(false);
+    setShowConfirmPassword(false);
+
     setErrorMessage("");
     setSuccessMessage("");
     setNeedsConfirmation(false);
   }, [isRegister]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  // ========================================
+  // REAL SUPABASE AUTHENTICATION
+  // ========================================
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     if (loading) return;
@@ -51,19 +103,34 @@ export default function Login() {
     setSuccessMessage("");
     setNeedsConfirmation(false);
 
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail || !password) {
+      setErrorMessage(
+        "Please enter your email and password."
+      );
+      return;
+    }
+
     if (isRegister) {
       if (!displayName.trim()) {
-        setErrorMessage("Please enter your name.");
+        setErrorMessage(
+          "Please enter your full name."
+        );
         return;
       }
 
       if (password.length < 8) {
-        setErrorMessage("Password must be at least 8 characters.");
+        setErrorMessage(
+          "Password must be at least 8 characters."
+        );
         return;
       }
 
       if (password !== confirmPassword) {
-        setErrorMessage("Passwords do not match.");
+        setErrorMessage(
+          "Passwords do not match."
+        );
         return;
       }
     }
@@ -72,129 +139,281 @@ export default function Login() {
 
     try {
       if (isRegister) {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/login`,
-            data: {
-              display_name: displayName.trim(),
+        // ==================================
+        // SUPABASE SIGN UP
+        // ==================================
+
+        const { data, error } =
+          await supabase.auth.signUp({
+            email: cleanEmail,
+            password,
+            options: {
+              emailRedirectTo:
+                `${window.location.origin}/login`,
+              data: {
+                display_name: displayName.trim(),
+              },
             },
-          },
-        });
+          });
 
         if (error) {
-          setErrorMessage(error.message);
-          return;
+          throw error;
         }
 
         if (data.session) {
-          navigate("/", { replace: true });
-        } else {
-          setNeedsConfirmation(true);
-          setSuccessMessage(
-            "Account created! Please check your email to confirm your account."
-          );
-        }
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-
-        if (error) {
-          setErrorMessage(error.message);
-
-          if (
-            error.message.toLowerCase().includes("email not confirmed")
-          ) {
-            setNeedsConfirmation(true);
-          }
+          navigate("/", {
+            replace: true,
+          });
 
           return;
         }
 
-        navigate("/", { replace: true });
+        setNeedsConfirmation(true);
+
+        setSuccessMessage(
+          "Account created. Check your email for the confirmation link before signing in."
+        );
+      } else {
+        // ==================================
+        // SUPABASE SIGN IN
+        // ==================================
+
+        const { data, error } =
+          await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password,
+          });
+
+        if (error) {
+          throw error;
+        }
+
+        if (!data.session) {
+          throw new Error(
+            "No login session was created. Please try again."
+          );
+        }
+
+        // REAL LOGIN SUCCESS
+        // Redirect to the StudyRoom dashboard.
+
+        navigate("/", {
+          replace: true,
+        });
       }
-    } catch {
-      setErrorMessage("Something went wrong. Please try again.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Authentication failed. Please try again.";
+
+      setErrorMessage(message);
+
+      if (
+        message
+          .toLowerCase()
+          .includes("email not confirmed")
+      ) {
+        setNeedsConfirmation(true);
+      }
     } finally {
       setLoading(false);
     }
   }
 
+  // ========================================
+  // RESEND VERIFICATION EMAIL
+  // ========================================
+
   async function handleResendConfirmation() {
-    if (!email.trim() || resending) return;
+    if (!email.trim() || resending) {
+      return;
+    }
 
     setResending(true);
     setErrorMessage("");
     setSuccessMessage("");
 
     try {
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email: email.trim(),
-        options: {
-          emailRedirectTo: `${window.location.origin}/login`,
-        },
-      });
+      const { error } =
+        await supabase.auth.resend({
+          type: "signup",
+          email: email.trim(),
+          options: {
+            emailRedirectTo:
+              `${window.location.origin}/login`,
+          },
+        });
 
       if (error) {
-        setErrorMessage(error.message);
-        return;
+        throw error;
       }
 
       setSuccessMessage(
-        "If your account is eligible, a new confirmation email has been sent."
+        "If your account is eligible, a confirmation email has been sent."
       );
-    } catch {
-      setErrorMessage("Unable to resend the email. Please try again.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to resend confirmation email."
+      );
     } finally {
       setResending(false);
     }
   }
 
+  // ========================================
+  // UI
+  // ========================================
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center px-4 py-6 font-sans sm:px-6"
-      style={{
-        background:
-          "radial-gradient(circle at 10% 15%, #a9e4ff, transparent 40%), radial-gradient(circle at 85% 15%, #d3f4ff, transparent 40%), linear-gradient(135deg, #eaf8ff, #c9ecff 55%, #eefaff)",
-      }}
-    >
-      {/* COMPACT MAIN AUTH CONTAINER */}
-      <div className="w-full max-w-[520px] rounded-[30px] border border-white/90 bg-white/55 p-2 shadow-[0_25px_80px_rgba(35,121,175,0.18)] backdrop-blur-xl sm:p-3">
+    <main className="relative min-h-screen overflow-hidden bg-[#081428] text-white">
+      {/* BACKGROUND */}
 
-        {/* SINGLE COLUMN - NO EMPTY RIGHT SIDE */}
-        <div className="overflow-hidden rounded-[24px] bg-white/85">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(16,185,236,0.08),transparent_38%),linear-gradient(180deg,#081428,#0a1930)]" />
 
-          <div className="flex flex-col bg-[#f8fcff]/95 p-6 sm:p-8">
+      <div className="relative mx-auto flex min-h-screen max-w-[1240px] flex-col px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
 
-            {/* TOP BRAND */}
-            <div className="flex items-center justify-between">
-              <img
-                src="/studyroom-logo.svg"
-                alt="StudyRoom"
-                className="h-11 w-11 object-contain"
-              />
+        {/* TOP BRAND */}
 
-              <span className="rounded-full border border-sky-100 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-600">
+        <header className="flex items-center justify-between rounded-2xl border border-[#2d3d54] bg-[#162236] px-4 py-3 sm:px-5">
+          <div className="flex items-center gap-3">
+            <img
+              src="/studyroom-logo.svg"
+              alt="StudyRoom logo"
+              className="h-11 w-11 rounded-xl object-contain"
+            />
+
+            <div>
+              <p className="text-lg font-semibold text-white">
                 StudyRoom
-              </span>
+              </p>
+
+              <p className="text-xs text-[#a9b9d0]">
+                Smart learning workspace
+              </p>
             </div>
+          </div>
 
-            {/* AUTH CONTENT */}
-            <div className="mx-auto w-full max-w-[380px] py-8 sm:py-9">
+          <span className="hidden rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-200 sm:block">
+            AI-powered reviewer platform
+          </span>
+        </header>
 
-              {/* SIGN IN / SIGN UP */}
-              <div className="mb-7 flex rounded-xl border border-sky-100 bg-[#eaf7ff] p-1">
+        {/* MAIN CONTENT */}
+
+        <div className="flex flex-1 items-center justify-center py-8 sm:py-12">
+
+          <div className="grid w-full max-w-[1150px] gap-6 lg:grid-cols-[1.1fr_1fr]">
+
+            {/* LEFT INFORMATION PANEL */}
+
+            <section className="hidden min-h-[610px] flex-col justify-between rounded-[28px] border border-[#2d3d54] bg-[#0d1c33] p-8 lg:flex">
+
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200">
+                  <Sparkles className="h-3.5 w-3.5" />
+
+                  Welcome to StudyRoom
+                </div>
+
+                <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight text-white">
+                  Build reviewers, flashcards,
+                  and quizzes in one clean
+                  study workspace.
+                </h1>
+
+                <p className="mt-5 text-base leading-7 text-[#a9b9d0]">
+                  Keep your lessons organized,
+                  generate AI-powered reviewers,
+                  practice with quizzes, and
+                  study smarter in one place.
+                </p>
+              </div>
+
+              {/* FEATURE CARDS */}
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  [
+                    "Reviewers",
+                    "Study guides from lessons and uploaded files.",
+                  ],
+                  [
+                    "Flashcards",
+                    "Quick cards for active recall.",
+                  ],
+                  [
+                    "Practice Quiz",
+                    "Check your learning and progress.",
+                  ],
+                ].map(([title, description]) => (
+                  <div
+                    key={title}
+                    className="rounded-2xl border border-[#2d3d54] bg-[#162236] p-4"
+                  >
+                    <p className="text-sm font-semibold text-white">
+                      {title}
+                    </p>
+
+                    <p className="mt-2 text-sm leading-5 text-[#a9b9d0]">
+                      {description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* RIGHT AUTHENTICATION CARD */}
+
+            <section className="mx-auto w-full max-w-[550px] rounded-[28px] border border-[#2d3d54] bg-[#0c192e] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.16)] sm:p-7 lg:max-w-none">
+
+              {/* HEADING */}
+
+              <div className="flex items-start justify-between gap-3">
+
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-cyan-300">
+                    StudyRoom Access
+                  </p>
+
+                  <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">
+                    {isRegister
+                      ? "Create Account"
+                      : "Welcome Back"}
+                  </h2>
+
+                  <p className="mt-2 text-sm text-[#a9b9d0]">
+                    {isRegister
+                      ? "Create your account to start learning."
+                      : "Sign in to continue your study journey."}
+                  </p>
+                </div>
+
+                <span className="hidden shrink-0 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-200 sm:block">
+                  StudyRoom
+                </span>
+              </div>
+
+              {/* SIGN IN / SIGN UP TABS */}
+
+              <nav
+                className="mt-6 grid grid-cols-2 rounded-2xl border border-[#2d3d54] bg-[#162236] p-1"
+                aria-label="Authentication pages"
+              >
 
                 <Link
                   to="/login"
-                  className={`flex-1 rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition ${
+                  aria-current={
                     !isRegister
-                      ? "bg-white text-sky-600 shadow-sm"
-                      : "text-slate-500 hover:text-sky-600"
+                      ? "page"
+                      : undefined
+                  }
+                  className={`rounded-xl px-4 py-3 text-center text-sm font-semibold transition ${
+                    !isRegister
+                      ? "bg-[#253752] text-white"
+                      : "text-[#a9b9d0] hover:text-white"
                   }`}
                 >
                   Sign In
@@ -202,200 +421,247 @@ export default function Login() {
 
                 <Link
                   to="/register"
-                  className={`flex-1 rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition ${
+                  aria-current={
                     isRegister
-                      ? "bg-white text-sky-600 shadow-sm"
-                      : "text-slate-500 hover:text-sky-600"
+                      ? "page"
+                      : undefined
+                  }
+                  className={`rounded-xl px-4 py-3 text-center text-sm font-semibold transition ${
+                    isRegister
+                      ? "bg-[#253752] text-white"
+                      : "text-[#a9b9d0] hover:text-white"
                   }`}
                 >
                   Sign Up
                 </Link>
+              </nav>
 
-              </div>
+              {/* AUTHENTICATION FORM */}
 
-              {/* HEADING */}
-              <div className="mb-7">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-sky-500">
-                  Welcome to StudyRoom
-                </p>
+              <form
+                onSubmit={handleSubmit}
+                className="mt-6 space-y-4"
+              >
 
-                <h1 className="text-3xl font-extrabold tracking-tight text-[#18384d] sm:text-4xl">
-                  {isRegister ? "Create Account" : "Welcome Back"}
-                </h1>
+                {/* FULL NAME */}
 
-                <p className="mt-3 text-sm text-slate-500">
-                  {isRegister
-                    ? "Create your account and start learning."
-                    : "Sign in to continue your learning journey."}
-                </p>
-              </div>
-
-              {/* AUTH FORM */}
-              <form onSubmit={handleSubmit} className="space-y-4">
-
-                {/* FULL NAME - REGISTRATION ONLY */}
                 {isRegister && (
                   <div>
                     <label
                       htmlFor="auth-name"
-                      className="mb-2 block text-sm font-medium text-[#29455c]"
+                      className="mb-2 block text-sm font-medium text-[#eaf0fb]"
                     >
                       Full name
                     </label>
 
-                    <div className="relative">
-                      <UserRound
-                        size={18}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-400"
-                      />
+                    <div className="flex h-12 items-center gap-3 rounded-xl border border-[#425776] bg-[#162236] px-4 focus-within:border-cyan-400">
+
+                      <UserRound className="h-4 w-4 shrink-0 text-cyan-300" />
 
                       <input
                         id="auth-name"
                         type="text"
-                        placeholder="Enter your full name"
-                        value={displayName}
-                        onChange={(e) => setDisplayName(e.target.value)}
                         autoComplete="name"
                         required
-                        className="h-12 w-full rounded-xl border border-sky-100 bg-white/90 pl-12 pr-4 text-sm text-[#18384d] outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                        value={displayName}
+                        onChange={(event) =>
+                          setDisplayName(
+                            event.target.value
+                          )
+                        }
+                        placeholder="Enter your full name"
+                        className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#91a5c1]"
                       />
                     </div>
                   </div>
                 )}
 
                 {/* EMAIL */}
+
                 <div>
                   <label
                     htmlFor="auth-email"
-                    className="mb-2 block text-sm font-medium text-[#29455c]"
+                    className="mb-2 block text-sm font-medium text-[#eaf0fb]"
                   >
                     Email address
                   </label>
 
-                  <div className="relative">
-                    <Mail
-                      size={18}
-                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-400"
-                    />
+                  <div className="flex h-12 items-center gap-3 rounded-xl border border-[#425776] bg-[#162236] px-4 focus-within:border-cyan-400">
+
+                    <Mail className="h-4 w-4 shrink-0 text-cyan-300" />
 
                     <input
                       id="auth-email"
                       type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
                       autoComplete="email"
                       required
-                      className="h-12 w-full rounded-xl border border-sky-100 bg-white/90 pl-12 pr-4 text-sm text-[#18384d] outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                      value={email}
+                      onChange={(event) =>
+                        setEmail(
+                          event.target.value
+                        )
+                      }
+                      placeholder="you@example.com"
+                      className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#91a5c1]"
                     />
                   </div>
                 </div>
 
                 {/* PASSWORD */}
+
                 <div>
                   <label
                     htmlFor="auth-password"
-                    className="mb-2 block text-sm font-medium text-[#29455c]"
+                    className="mb-2 block text-sm font-medium text-[#eaf0fb]"
                   >
                     Password
                   </label>
 
-                  <div className="relative">
-                    <LockKeyhole
-                      size={18}
-                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-400"
-                    />
+                  <div className="flex h-12 items-center gap-3 rounded-xl border border-[#425776] bg-[#162236] px-4 focus-within:border-cyan-400">
+
+                    <LockKeyhole className="h-4 w-4 shrink-0 text-cyan-300" />
 
                     <input
                       id="auth-password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      autoComplete={
-                        isRegister ? "new-password" : "current-password"
+                      type={
+                        showPassword
+                          ? "text"
+                          : "password"
                       }
                       required
-                      minLength={isRegister ? 8 : undefined}
-                      className="h-12 w-full rounded-xl border border-sky-100 bg-white/90 pl-12 pr-12 text-sm text-[#18384d] outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                      autoComplete={
+                        isRegister
+                          ? "new-password"
+                          : "current-password"
+                      }
+                      minLength={
+                        isRegister
+                          ? 8
+                          : undefined
+                      }
+                      value={password}
+                      onChange={(event) =>
+                        setPassword(
+                          event.target.value
+                        )
+                      }
+                      placeholder="Enter your password"
+                      className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#91a5c1]"
                     />
 
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      aria-label={
-                        showPassword ? "Hide password" : "Show password"
+                      onClick={() =>
+                        setShowPassword(
+                          (value) => !value
+                        )
                       }
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-sky-400 hover:text-sky-600"
+                      aria-label={
+                        showPassword
+                          ? "Hide password"
+                          : "Show password"
+                      }
+                      className="shrink-0 text-[#a9b9d0] hover:text-white"
                     >
                       {showPassword ? (
-                        <EyeOff size={18} />
+                        <EyeOff className="h-4 w-4" />
                       ) : (
-                        <Eye size={18} />
+                        <Eye className="h-4 w-4" />
                       )}
                     </button>
                   </div>
                 </div>
 
-                {/* CONFIRM PASSWORD - REGISTRATION ONLY */}
+                {/* CONFIRM PASSWORD */}
+
                 {isRegister && (
                   <div>
                     <label
                       htmlFor="auth-confirm"
-                      className="mb-2 block text-sm font-medium text-[#29455c]"
+                      className="mb-2 block text-sm font-medium text-[#eaf0fb]"
                     >
                       Confirm password
                     </label>
 
-                    <div className="relative">
-                      <LockKeyhole
-                        size={18}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sky-400"
-                      />
+                    <div className="flex h-12 items-center gap-3 rounded-xl border border-[#425776] bg-[#162236] px-4 focus-within:border-cyan-400">
+
+                      <LockKeyhole className="h-4 w-4 shrink-0 text-cyan-300" />
 
                       <input
                         id="auth-confirm"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Confirm your password"
-                        value={confirmPassword}
-                        onChange={(e) =>
-                          setConfirmPassword(e.target.value)
+                        type={
+                          showConfirmPassword
+                            ? "text"
+                            : "password"
                         }
-                        autoComplete="new-password"
                         required
-                        className="h-12 w-full rounded-xl border border-sky-100 bg-white/90 pl-12 pr-4 text-sm text-[#18384d] outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                        autoComplete="new-password"
+                        value={confirmPassword}
+                        onChange={(event) =>
+                          setConfirmPassword(
+                            event.target.value
+                          )
+                        }
+                        placeholder="Confirm your password"
+                        className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#91a5c1]"
                       />
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowConfirmPassword(
+                            (value) => !value
+                          )
+                        }
+                        aria-label={
+                          showConfirmPassword
+                            ? "Hide confirmation password"
+                            : "Show confirmation password"
+                        }
+                        className="shrink-0 text-[#a9b9d0] hover:text-white"
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 )}
 
                 {/* ERROR MESSAGE */}
+
                 {errorMessage && (
-                  <div
+                  <p
                     role="alert"
-                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"
+                    className="rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
                   >
                     {errorMessage}
-                  </div>
+                  </p>
                 )}
 
                 {/* SUCCESS MESSAGE */}
+
                 {successMessage && (
-                  <div
+                  <p
                     role="status"
-                    className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700"
+                    className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
                   >
                     {successMessage}
-                  </div>
+                  </p>
                 )}
 
-                {/* RESEND CONFIRMATION */}
+                {/* EMAIL CONFIRMATION */}
+
                 {needsConfirmation && (
                   <button
                     type="button"
-                    onClick={handleResendConfirmation}
+                    onClick={() =>
+                      void handleResendConfirmation()
+                    }
                     disabled={resending}
-                    className="w-full text-center text-sm font-semibold text-sky-600 transition hover:text-sky-700 disabled:opacity-60"
+                    className="text-sm font-semibold text-cyan-300 underline-offset-4 hover:underline disabled:opacity-60"
                   >
                     {resending
                       ? "Sending confirmation..."
@@ -404,33 +670,42 @@ export default function Login() {
                 )}
 
                 {/* SUBMIT BUTTON */}
+
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-sky-500 to-cyan-500 text-sm font-semibold text-white shadow-lg shadow-sky-200/70 transition hover:from-sky-600 hover:to-cyan-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-4 text-sm font-semibold text-white shadow-lg shadow-cyan-950/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loading ? (
-                    isRegister
-                      ? "Creating account..."
-                      : "Signing in..."
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+
+                      {isRegister
+                        ? "Creating account..."
+                        : "Signing in..."}
+                    </>
                   ) : (
                     <>
-                      {isRegister ? "Create Account" : "Sign In"}
-                      <ArrowRight size={17} />
+                      {isRegister
+                        ? "Create Account"
+                        : "Sign In"}
+
+                      <ArrowRight className="h-4 w-4" />
                     </>
                   )}
                 </button>
-
               </form>
 
-              {/* SWITCH LINK */}
-              <p className="mt-7 text-center text-sm text-slate-500">
+              {/* SWITCH AUTH PAGE */}
+
+              <p className="mt-5 text-center text-sm text-[#a9b9d0]">
                 {isRegister ? (
                   <>
                     Already have an account?{" "}
+
                     <Link
                       to="/login"
-                      className="font-semibold text-sky-600 hover:text-sky-700"
+                      className="font-semibold text-cyan-300 hover:underline"
                     >
                       Sign in
                     </Link>
@@ -438,9 +713,10 @@ export default function Login() {
                 ) : (
                   <>
                     Don't have an account?{" "}
+
                     <Link
                       to="/register"
-                      className="font-semibold text-sky-600 hover:text-sky-700"
+                      className="font-semibold text-cyan-300 hover:underline"
                     >
                       Sign up
                     </Link>
@@ -448,30 +724,29 @@ export default function Login() {
                 )}
               </p>
 
-            </div>
+              {/* BOTTOM INFO */}
 
-            {/* BOTTOM INFO */}
-            <div className="rounded-2xl border border-sky-100 bg-[#eaf7ff] px-4 py-4 sm:px-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-sky-500 shadow-sm">
-                  <BookOpen size={20} />
+              <div className="mt-6 flex items-center gap-3 rounded-2xl border border-[#2d3d54] bg-[#162236] p-4">
+
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#253752]">
+                  <BookOpen className="h-5 w-5 text-cyan-300" />
                 </div>
 
                 <div>
-                  <p className="text-sm font-semibold text-[#234e68]">
+                  <p className="text-sm font-semibold text-white">
                     One place for all your learning
                   </p>
 
-                  <p className="mt-0.5 text-xs text-[#64869c]">
+                  <p className="mt-1 text-xs text-[#a9b9d0]">
                     Reviewers · Flashcards · Practice Quizzes
                   </p>
                 </div>
               </div>
-            </div>
 
+            </section>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
