@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -12,9 +13,13 @@ import {
 } from "react-router-dom";
 
 import {
+  ArrowDown,
+  ArrowUp,
   BookOpen,
   CheckCircle2,
   Download,
+  FileDown,
+  Files,
   Loader2,
   Pencil,
   RefreshCw,
@@ -22,6 +27,7 @@ import {
   Sparkles,
   Trash2,
   WifiOff,
+  X,
 } from "lucide-react";
 
 import { supabase } from "../../lib/supabaseClient";
@@ -31,6 +37,10 @@ import {
   getAllOfflineReviewers,
   type OfflineReviewerRecord,
 } from "../../lib/offlineReviewerStore";
+
+import MathReviewerContent from "../../components/reviewer/MathReviewerContent";
+import { printReviewerPdf } from "../../lib/printReviewerPdf";
+import { getReviewerVisuals } from "../../lib/reviewerVisualReader";
 
 // ==========================================
 // TYPES
@@ -59,6 +69,17 @@ type ReviewerListItem = {
   content: string | null;
   is_ai_generated: boolean;
   updated_date: string;
+};
+
+type CombineCandidate = ReviewerListItem & {
+  source: "online" | "downloaded";
+};
+
+type CombinePanelProps = {
+  onlineReviewers: Reviewer[];
+  downloadedReviewers: OfflineReviewerRecord[];
+  isOnline: boolean;
+  onClose: () => void;
 };
 
 // ==========================================
@@ -93,6 +114,895 @@ function errorMessage(
   return error instanceof Error
     ? error.message
     : fallback;
+}
+
+function blobToDataUrl(
+  blob: Blob
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(
+          new Error("Could not read a diagram.")
+        );
+      }
+    };
+
+    reader.onerror = () => {
+      reject(
+        new Error("Could not read a diagram.")
+      );
+    };
+
+    reader.readAsDataURL(blob);
+  });
+}
+
+function pdfNode<
+  K extends keyof HTMLElementTagNameMap
+>(
+  tag: K,
+  className: string,
+  text?: string
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  node.className = className;
+
+  if (text !== undefined) {
+    node.textContent = text;
+  }
+
+  return node;
+}
+
+// ==========================================
+// COMBINE REVIEWERS PANEL
+// ==========================================
+
+function CombineReviewersPanel({
+  onlineReviewers,
+  downloadedReviewers,
+  isOnline,
+  onClose,
+}: CombinePanelProps) {
+  const [query, setQuery] = useState("");
+
+  const [pdfTitle, setPdfTitle] =
+    useState("My Combined Reviewer");
+
+  const [selectedIds, setSelectedIds] =
+    useState<string[]>([]);
+
+  const [includeToc, setIncludeToc] =
+    useState(true);
+
+  // false: Reviewer Only
+  // true: Include original source images
+  const [includeDiagrams, setIncludeDiagrams] =
+    useState(false);
+
+  const [exporting, setExporting] =
+    useState(false);
+
+  const [progress, setProgress] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const renderRef =
+    useRef<HTMLDivElement>(null);
+
+  // ========================================
+  // AVAILABLE REVIEWERS
+  // ========================================
+
+  const choices = useMemo(() => {
+    const map = new Map<
+      string,
+      CombineCandidate
+    >();
+
+    for (const record of downloadedReviewers) {
+      map.set(record.id, {
+        ...record.reviewer,
+        source: "downloaded",
+      });
+    }
+
+    if (isOnline) {
+      for (const reviewer of onlineReviewers) {
+        map.set(reviewer.id, {
+          ...reviewer,
+          source: "online",
+        });
+      }
+    }
+
+    return [...map.values()].sort(
+      (a, b) =>
+        a.title.localeCompare(b.title)
+    );
+  }, [
+    onlineReviewers,
+    downloadedReviewers,
+    isOnline,
+  ]);
+
+  // ========================================
+  // SEARCH
+  // ========================================
+
+  const filtered = useMemo(() => {
+    const needle = query
+      .trim()
+      .toLowerCase();
+
+    return choices.filter((item) =>
+      `${item.title} ${item.subject ?? ""}`
+        .toLowerCase()
+        .includes(needle)
+    );
+  }, [choices, query]);
+
+  // ========================================
+  // SELECTED REVIEWERS
+  // ========================================
+
+  const selected = useMemo(() => {
+    const byId = new Map(
+      choices.map((item) => [
+        item.id,
+        item,
+      ])
+    );
+
+    return selectedIds
+      .map((id) => byId.get(id))
+      .filter(
+        (item): item is CombineCandidate =>
+          item !== undefined
+      );
+  }, [choices, selectedIds]);
+
+  // ========================================
+  // SELECT / UNSELECT
+  // ========================================
+
+  function toggle(id: string) {
+    setSelectedIds((current) =>
+      current.includes(id)
+        ? current.filter(
+            (item) => item !== id
+          )
+        : [...current, id]
+    );
+
+    setError("");
+  }
+
+  // ========================================
+  // REORDER CHAPTERS
+  // ========================================
+
+  function move(
+    id: string,
+    offset: -1 | 1
+  ) {
+    setSelectedIds((current) => {
+      const next = [...current];
+
+      const index = next.indexOf(id);
+      const target = index + offset;
+
+      if (
+        index < 0 ||
+        target < 0 ||
+        target >= next.length
+      ) {
+        return current;
+      }
+
+      [next[index], next[target]] = [
+        next[target],
+        next[index],
+      ];
+
+      return next;
+    });
+  }
+
+  // ========================================
+  // LOAD ORIGINAL SOURCE IMAGES
+  // ========================================
+
+  async function loadDiagrams(
+    item: CombineCandidate
+  ) {
+    // DOWNLOADED SOURCE
+
+    if (item.source === "downloaded") {
+      const record =
+        downloadedReviewers.find(
+          (entry) => entry.id === item.id
+        );
+
+      if (!record) {
+        throw new Error(
+          `Offline diagrams missing: ${item.title}`
+        );
+      }
+
+      return Promise.all(
+        record.visuals.map(
+          async ({ metadata, blob }) => ({
+            pageNumber: metadata.pageNumber,
+            dataUrl: await blobToDataUrl(blob),
+          })
+        )
+      );
+    }
+
+    // CLOUD SOURCE
+
+    const savedVisuals =
+      await getReviewerVisuals(item.id);
+
+    return Promise.all(
+      savedVisuals.map(async (visual) => {
+        const response = await fetch(visual.url);
+
+        if (!response.ok) {
+          throw new Error(
+            `Could not load a diagram for ${item.title}.`
+          );
+        }
+
+        return {
+          pageNumber: visual.pageNumber,
+          dataUrl: await blobToDataUrl(
+            await response.blob()
+          ),
+        };
+      })
+    );
+  }
+
+  // ========================================
+  // COMBINE AND DOWNLOAD PDF
+  // ========================================
+
+  async function combineAndDownload() {
+    if (
+      exporting ||
+      selected.length < 2
+    ) {
+      return;
+    }
+
+    if (!pdfTitle.trim()) {
+      setError("Please enter a PDF title.");
+      return;
+    }
+
+    setExporting(true);
+    setError("");
+    setProgress("Preparing reviewer chapters...");
+
+    try {
+      const combined =
+        document.createElement("div");
+
+      const style =
+        document.createElement("style");
+
+      style.textContent = `
+        #sr-pdf-download .combined-chapter-title {
+          font-size: 22px !important;
+          line-height: 1.3 !important;
+          font-weight: 700 !important;
+          margin: 0 0 7px !important;
+          color: #14243d !important;
+        }
+
+        #sr-pdf-download .combined-subject {
+          color: #64748b !important;
+          font-size: 12px !important;
+          margin-bottom: 16px !important;
+        }
+
+        #sr-pdf-download .combined-diagram {
+          max-width: 100% !important;
+          max-height: 650px !important;
+          display: block !important;
+          object-fit: contain !important;
+          margin: 12px auto 5px !important;
+        }
+
+        #sr-pdf-download .combined-figure {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+          margin: 14px 0 !important;
+        }
+
+        #sr-pdf-download .html2pdf__page-break {
+          break-after: page !important;
+          page-break-after: always !important;
+          height: 0 !important;
+        }
+      `;
+
+      combined.appendChild(style);
+
+      // ====================================
+      // TABLE OF CONTENTS
+      // ====================================
+
+      if (includeToc) {
+        const toc = pdfNode(
+          "section",
+          "combined-toc"
+        );
+
+        toc.appendChild(
+          pdfNode(
+            "h2",
+            "",
+            "Table of Contents"
+          )
+        );
+
+        const ordered = pdfNode("ol", "");
+
+        selected.forEach((item) => {
+          ordered.appendChild(
+            pdfNode(
+              "li",
+              "",
+              `${item.title} — ${
+                item.subject || "General"
+              }`
+            )
+          );
+        });
+
+        toc.appendChild(ordered);
+        combined.appendChild(toc);
+      }
+
+      // ====================================
+      // BUILD EACH REVIEWER CHAPTER
+      // ====================================
+
+      for (
+        let i = 0;
+        i < selected.length;
+        i++
+      ) {
+        const reviewer = selected[i];
+
+        const rendered =
+          renderRef.current?.children.item(i);
+
+        if (!(rendered instanceof HTMLElement)) {
+          throw new Error(
+            `Content isn't ready: ${reviewer.title}`
+          );
+        }
+
+        setProgress(
+          `Preparing chapter ${
+            i + 1
+          } of ${selected.length}...`
+        );
+
+        // Begin each chapter on a new page.
+
+        if (i > 0 || includeToc) {
+          combined.appendChild(
+            pdfNode(
+              "div",
+              "html2pdf__page-break"
+            )
+          );
+        }
+
+        const chapter = pdfNode(
+          "section",
+          "combined-chapter"
+        );
+
+        chapter.appendChild(
+          pdfNode(
+            "h2",
+            "combined-chapter-title",
+            `${i + 1}. ${reviewer.title}`
+          )
+        );
+
+        chapter.appendChild(
+          pdfNode(
+            "p",
+            "combined-subject",
+            reviewer.subject || "General"
+          )
+        );
+
+        // Preserve rendered reviewer notes.
+        // MathReviewerContent already
+        // processes Markdown and KaTeX.
+        // This keeps calculations, formulas,
+        // tables, and embedded graphs.
+
+        chapter.appendChild(
+          rendered.cloneNode(true)
+        );
+
+        // ==================================
+        // ORIGINAL IMAGES: OPTIONAL
+        // ==================================
+
+        if (includeDiagrams) {
+          const diagrams =
+            await loadDiagrams(reviewer);
+
+          if (diagrams.length > 0) {
+            chapter.appendChild(
+              pdfNode(
+                "h3",
+                "",
+                "Original Diagrams & Figures"
+              )
+            );
+          }
+
+          for (const diagram of diagrams.sort(
+            (a, b) =>
+              a.pageNumber - b.pageNumber
+          )) {
+            const figure = pdfNode(
+              "figure",
+              "combined-figure"
+            );
+
+            const image = pdfNode(
+              "img",
+              "combined-diagram"
+            );
+
+            image.src = diagram.dataUrl;
+
+            image.alt =
+              `Source page ${diagram.pageNumber}`;
+
+            figure.appendChild(image);
+
+            figure.appendChild(
+              pdfNode(
+                "figcaption",
+                "",
+                `Source page ${diagram.pageNumber}`
+              )
+            );
+
+            chapter.appendChild(figure);
+          }
+        }
+
+        combined.appendChild(chapter);
+      }
+
+      // ====================================
+      // EXPORT PDF
+      // ====================================
+
+      setProgress("Rendering combined PDF...");
+
+      await printReviewerPdf({
+        title: pdfTitle.trim(),
+        subject:
+          `${selected.length} combined reviewers`,
+        updatedAt: new Date().toISOString(),
+        contentElement: combined,
+      });
+
+      setProgress("");
+    } catch (cause) {
+      console.error(
+        "Could not combine reviewers:",
+        cause
+      );
+
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not create the combined PDF."
+      );
+
+      setProgress("");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // ========================================
+  // COMBINE PANEL UI
+  // ========================================
+
+  return (
+    <section
+      className="panel space-y-5 p-4 sm:p-6"
+      aria-label="Combine reviewers"
+    >
+      {/* HEADER */}
+
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <Files className="h-5 w-5 text-primary" />
+            Combine reviewers to PDF
+          </h2>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            Choose saved reviewers, arrange
+            their chapters, and export one PDF.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={exporting}
+          aria-label="Close combine reviewers"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border disabled:opacity-50"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* TITLE AND SEARCH */}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs font-medium text-muted-foreground">
+          PDF title
+
+          <input
+            className="input mt-1.5"
+            value={pdfTitle}
+            maxLength={90}
+            onChange={(event) =>
+              setPdfTitle(event.target.value)
+            }
+            disabled={exporting}
+            placeholder="e.g. Final Exam Reviewer"
+          />
+        </label>
+
+        <label className="block text-xs font-medium text-muted-foreground">
+          Search reviewers
+
+          <input
+            type="search"
+            className="input mt-1.5"
+            value={query}
+            onChange={(event) =>
+              setQuery(event.target.value)
+            }
+            disabled={exporting}
+            placeholder="Title or subject"
+          />
+        </label>
+      </div>
+
+      {/* SELECTION TOOLS */}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          {selected.length} selected ·{" "}
+          {choices.length} available
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={
+              exporting ||
+              filtered.length === 0
+            }
+            onClick={() =>
+              setSelectedIds((current) => [
+                ...current,
+                ...filtered
+                  .map((item) => item.id)
+                  .filter(
+                    (id) => !current.includes(id)
+                  ),
+              ])
+            }
+          >
+            Select shown
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={
+              exporting ||
+              selectedIds.length === 0
+            }
+            onClick={() =>
+              setSelectedIds([])
+            }
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      {/* REVIEWER SELECTION */}
+
+      <div className="max-h-60 space-y-1 overflow-y-auto rounded-xl border border-border p-2">
+        {filtered.length > 0 ? (
+          filtered.map((item) => (
+            <label
+              key={item.id}
+              className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-secondary/50"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(
+                  item.id
+                )}
+                disabled={exporting}
+                onChange={() =>
+                  toggle(item.id)
+                }
+              />
+
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-foreground">
+                  {item.title}
+                </span>
+
+                <span className="block text-xs text-muted-foreground">
+                  {item.subject || "General"} ·{" "}
+                  {item.source === "online"
+                    ? "Cloud"
+                    : "Downloaded"}
+                </span>
+              </span>
+            </label>
+          ))
+        ) : (
+          <p className="p-3 text-sm text-muted-foreground">
+            No matching reviewers.
+          </p>
+        )}
+      </div>
+
+      {/* CHAPTER ORDER */}
+
+      {selected.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-foreground">
+            Chapter order
+          </p>
+
+          {selected.map((item, index) => (
+            <div
+              key={item.id}
+              className="flex items-center gap-2 rounded-lg border border-border p-2"
+            >
+              <span className="w-6 text-center text-xs text-muted-foreground">
+                {index + 1}
+              </span>
+
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                {item.title}
+              </span>
+
+              <button
+                type="button"
+                title="Move up"
+                aria-label={`Move ${item.title} up`}
+                disabled={
+                  exporting || index === 0
+                }
+                onClick={() =>
+                  move(item.id, -1)
+                }
+                className="grid h-8 w-8 place-items-center rounded-md border border-border disabled:opacity-30"
+              >
+                <ArrowUp className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                title="Move down"
+                aria-label={`Move ${item.title} down`}
+                disabled={
+                  exporting ||
+                  index === selected.length - 1
+                }
+                onClick={() =>
+                  move(item.id, 1)
+                }
+                className="grid h-8 w-8 place-items-center rounded-md border border-border disabled:opacity-30"
+              >
+                <ArrowDown className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                title="Remove"
+                aria-label={`Remove ${item.title}`}
+                disabled={exporting}
+                onClick={() =>
+                  toggle(item.id)
+                }
+                className="grid h-8 w-8 place-items-center rounded-md border border-border disabled:opacity-30"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* PDF EXPORT SETTINGS */}
+
+      <div className="space-y-3 rounded-lg border border-border bg-secondary/20 p-3">
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={includeToc}
+            disabled={exporting}
+            onChange={(event) =>
+              setIncludeToc(event.target.checked)
+            }
+          />
+
+          Include table of contents
+        </label>
+
+        <fieldset
+          className="space-y-3"
+          disabled={exporting}
+        >
+          <legend className="text-sm font-medium text-foreground">
+            PDF Content
+          </legend>
+
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-foreground">
+            <input
+              type="radio"
+              name="combined-pdf-mode"
+              checked={!includeDiagrams}
+              onChange={() =>
+                setIncludeDiagrams(false)
+              }
+              className="mt-1"
+            />
+
+            <span>
+              <span className="block font-medium">
+                Reviewer Only (Recommended)
+              </span>
+
+              <span className="block text-xs text-muted-foreground">
+                Keep notes, calculations,
+                formulas, tables, and embedded
+                reviewer graphs. Exclude original
+                uploaded pictures.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-foreground">
+            <input
+              type="radio"
+              name="combined-pdf-mode"
+              checked={includeDiagrams}
+              onChange={() =>
+                setIncludeDiagrams(true)
+              }
+              className="mt-1"
+            />
+
+            <span>
+              <span className="block font-medium">
+                Reviewer + Original Sources
+              </span>
+
+              <span className="block text-xs text-muted-foreground">
+                Attach separately saved original
+                pictures and scanned pages.
+              </span>
+            </span>
+          </label>
+        </fieldset>
+
+        <p className="text-xs text-muted-foreground">
+          Large reviewers and images may
+          take longer on mobile devices.
+        </p>
+      </div>
+
+      {/* ERRORS */}
+
+      {error && (
+        <p
+          role="alert"
+          className="text-sm text-destructive"
+        >
+          {error}
+        </p>
+      )}
+
+      {/* PROGRESS */}
+
+      {progress && (
+        <p
+          role="status"
+          className="text-xs text-muted-foreground"
+        >
+          {progress}
+        </p>
+      )}
+
+      {/* EXPORT BUTTON */}
+
+      <button
+        type="button"
+        disabled={
+          exporting ||
+          selected.length < 2 ||
+          !pdfTitle.trim()
+        }
+        onClick={() =>
+          void combineAndDownload()
+        }
+        className="btn btn-primary w-full justify-center disabled:opacity-50"
+      >
+        {exporting ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <FileDown className="h-4 w-4" />
+        )}
+
+        {exporting
+          ? "Preparing combined PDF..."
+          : `Combine & download PDF (${selected.length})`}
+      </button>
+
+      {/* HIDDEN MARKDOWN / MATH RENDERER */}
+
+      <div
+        ref={renderRef}
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          left: "-30000px",
+          top: 0,
+          width: 674,
+          pointerEvents: "none",
+        }}
+      >
+        {selected.map((item) => (
+          <div key={item.id}>
+            <MathReviewerContent
+              content={item.content ?? ""}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 // ==========================================
@@ -142,8 +1052,11 @@ export default function ReviewersPage() {
   const [subject, setSubject] =
     useState("All");
 
+  const [combining, setCombining] =
+    useState(false);
+
   // ========================================
-  // LOADING AND ERROR STATES
+  // LOADING STATES
   // ========================================
 
   const [loadingOnline, setLoadingOnline] =
@@ -277,7 +1190,7 @@ export default function ReviewersPage() {
   }, [loadDownloaded, loadReviewers]);
 
   // ========================================
-  // NETWORK STATUS LISTENERS
+  // ONLINE / OFFLINE LISTENERS
   // ========================================
 
   useEffect(() => {
@@ -335,7 +1248,7 @@ export default function ReviewersPage() {
   }
 
   // ========================================
-  // DOWNLOADED IDS
+  // DOWNLOADED IDS AND DATES
   // ========================================
 
   const downloadedIds = useMemo(
@@ -360,7 +1273,7 @@ export default function ReviewersPage() {
   );
 
   // ========================================
-  // ACTIVE REVIEWER COLLECTION
+  // ACTIVE REVIEWERS
   // ========================================
 
   const activeReviewers:
@@ -385,8 +1298,7 @@ export default function ReviewersPage() {
         activeReviewers
           .map(
             (reviewer) =>
-              reviewer.subject ||
-              "General"
+              reviewer.subject || "General"
           )
           .filter(
             (value) => value !== "All"
@@ -426,14 +1338,9 @@ export default function ReviewersPage() {
 
         const matchesQuery =
           !needle ||
-          searchableText.includes(
-            needle
-          );
+          searchableText.includes(needle);
 
-        return (
-          matchesSubject &&
-          matchesQuery
-        );
+        return matchesSubject && matchesQuery;
       }
     );
   }, [
@@ -453,16 +1360,13 @@ export default function ReviewersPage() {
   }
 
   // ========================================
-  // REMOVE OFFLINE DOWNLOAD ONLY
+  // REMOVE OFFLINE DOWNLOAD
   // ========================================
 
   async function removeDownload(
     id: string
   ) {
-    if (
-      removingLocalId ||
-      deletingId
-    ) {
+    if (removingLocalId || deletingId) {
       return;
     }
 
@@ -483,9 +1387,7 @@ export default function ReviewersPage() {
     setActionError("");
 
     try {
-      await deleteOfflineReviewer(
-        id
-      );
+      await deleteOfflineReviewer(id);
 
       setDownloaded((current) =>
         current.filter(
@@ -505,7 +1407,7 @@ export default function ReviewersPage() {
   }
 
   // ========================================
-  // DELETE ONLINE REVIEWER + IMAGES
+  // DELETE ONLINE REVIEWER
   // ========================================
 
   async function removeReviewer(
@@ -537,10 +1439,6 @@ export default function ReviewersPage() {
     setActionError("");
 
     try {
-      // ====================================
-      // VERIFY CURRENT USER
-      // ====================================
-
       const {
         data: { user },
         error: authError,
@@ -552,9 +1450,7 @@ export default function ReviewersPage() {
         );
       }
 
-      // ====================================
       // GET ASSOCIATED IMAGE PATHS
-      // ====================================
 
       const {
         data: imageRecords,
@@ -575,8 +1471,7 @@ export default function ReviewersPage() {
         imageRecords ?? []
       )
         .map(
-          (image) =>
-            image.storage_path
+          (image) => image.storage_path
         )
         .filter(
           (path): path is string =>
@@ -604,9 +1499,7 @@ export default function ReviewersPage() {
         );
       }
 
-      // ====================================
       // DELETE ONLINE REVIEWER
-      // ====================================
 
       const {
         data: deleted,
@@ -639,20 +1532,12 @@ export default function ReviewersPage() {
         )
       );
 
-      // Reviewer has been deleted online.
-      // Perform best-effort cleanup next.
+      const cleanupProblems: string[] = [];
 
-      const cleanupProblems:
-        string[] = [];
-
-      // ====================================
-      // DELETE LOCAL OFFLINE COPY
-      // ====================================
+      // REMOVE LOCAL COPY
 
       try {
-        await deleteOfflineReviewer(
-          id
-        );
+        await deleteOfflineReviewer(id);
 
         setDownloaded((current) =>
           current.filter(
@@ -670,9 +1555,7 @@ export default function ReviewersPage() {
         );
       }
 
-      // ====================================
-      // DELETE SUPABASE STORAGE IMAGES
-      // ====================================
+      // REMOVE SUPABASE IMAGES
 
       if (storagePaths.length > 0) {
         const {
@@ -693,14 +1576,10 @@ export default function ReviewersPage() {
         }
       }
 
-      if (
-        cleanupProblems.length > 0
-      ) {
+      if (cleanupProblems.length > 0) {
         setActionError(
           "Reviewer deleted online, but cleanup failed for " +
-          cleanupProblems.join(
-            " and "
-          ) +
+          cleanupProblems.join(" and ") +
           "."
         );
       }
@@ -741,9 +1620,7 @@ export default function ReviewersPage() {
 
   return (
     <div className="space-y-6">
-      {/* ======================================
-          PAGE HEADER
-      ====================================== */}
+      {/* HEADER */}
 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -778,17 +1655,31 @@ export default function ReviewersPage() {
           >
             <RefreshCw
               className={`h-4 w-4 ${
-                loadingDownloaded ||
-                loadingOnline
+                loadingDownloaded || loadingOnline
                   ? "animate-spin"
                   : ""
               }`}
             />
-
             Refresh
           </button>
 
-          {/* CREATE REVIEWER */}
+          {/* COMBINE REVIEWERS */}
+
+          <button
+            type="button"
+            onClick={() =>
+              setCombining(
+                (current) => !current
+              )
+            }
+            aria-expanded={combining}
+            className="btn btn-secondary"
+          >
+            <Files className="h-4 w-4" />
+            Combine reviewers
+          </button>
+
+          {/* NEW REVIEWER */}
 
           <Link
             to="/create"
@@ -800,13 +1691,22 @@ export default function ReviewersPage() {
         </div>
       </header>
 
-      {/* ======================================
-          LIBRARY TABS
-      ====================================== */}
+      {/* COMBINE PANEL */}
+
+      {combining && (
+        <CombineReviewersPanel
+          onlineReviewers={reviewers}
+          downloadedReviewers={downloaded}
+          isOnline={isOnline}
+          onClose={() =>
+            setCombining(false)
+          }
+        />
+      )}
+
+      {/* LIBRARY TABS */}
 
       <div className="flex flex-wrap items-center gap-2">
-        {/* ALL REVIEWERS */}
-
         <button
           type="button"
           onClick={() =>
@@ -830,8 +1730,6 @@ export default function ReviewersPage() {
             : ""}
         </button>
 
-        {/* DOWNLOADED REVIEWERS */}
-
         <button
           type="button"
           onClick={() =>
@@ -847,7 +1745,6 @@ export default function ReviewersPage() {
           }
         >
           <Download className="h-3.5 w-3.5" />
-
           Downloaded ({downloaded.length})
         </button>
       </div>
@@ -865,19 +1762,14 @@ export default function ReviewersPage() {
       {!isOnline && (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/20 p-3 text-sm text-muted-foreground">
           <WifiOff className="h-4 w-4" />
-
           You're offline. Your downloaded
           reviewers are available below.
         </div>
       )}
 
-      {/* ======================================
-          SEARCH AND FILTER
-      ====================================== */}
+      {/* SEARCH AND FILTER */}
 
       <div className="space-y-3">
-        {/* SEARCH */}
-
         <div className="relative sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
@@ -885,17 +1777,13 @@ export default function ReviewersPage() {
             type="search"
             value={query}
             onChange={(event) =>
-              updateSearch(
-                event.target.value
-              )
+              updateSearch(event.target.value)
             }
             placeholder="Search title, subject or content"
             className="input pl-9"
             aria-label="Search reviewers"
           />
         </div>
-
-        {/* SUBJECT FILTER */}
 
         <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {subjects.map((item) => (
@@ -917,23 +1805,18 @@ export default function ReviewersPage() {
         </div>
       </div>
 
-      {/* ======================================
-          ERROR MESSAGE
-      ====================================== */}
+      {/* ERRORS */}
 
       {(actionError || currentError) && (
         <div
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
         >
-          {actionError ||
-            currentError}
+          {actionError || currentError}
         </div>
       )}
 
-      {/* ======================================
-          LOADING STATE
-      ====================================== */}
+      {/* LOADING / EMPTY / LIST */}
 
       {loading ? (
         <div className="panel flex flex-col items-center justify-center px-6 py-14 text-center">
@@ -948,10 +1831,6 @@ export default function ReviewersPage() {
           </p>
         </div>
       ) : visible.length === 0 ? (
-        /* ====================================
-           EMPTY STATE
-        ==================================== */
-
         <div className="panel flex flex-col items-center justify-center px-6 py-14 text-center">
           <div className="grid h-12 w-12 place-items-center rounded-xl bg-secondary">
             {tab === "downloaded" ? (
@@ -982,16 +1861,11 @@ export default function ReviewersPage() {
                 className="btn btn-primary btn-sm mt-5"
               >
                 <Sparkles className="h-4 w-4" />
-
                 Create reviewer
               </Link>
             )}
         </div>
       ) : (
-        /* ====================================
-           REVIEWER LIST
-        ==================================== */
-
         <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
           {visible.map((reviewer) => (
             <article
@@ -1002,8 +1876,6 @@ export default function ReviewersPage() {
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* TITLE */}
-
                   <Link
                     to={`/reviewers/${encodeURIComponent(
                       reviewer.id
@@ -1013,14 +1885,9 @@ export default function ReviewersPage() {
                     {reviewer.title}
                   </Link>
 
-                  {/* SUBJECT */}
-
                   <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {reviewer.subject ||
-                      "General"}
+                    {reviewer.subject || "General"}
                   </span>
-
-                  {/* AI BADGE */}
 
                   {reviewer.is_ai_generated && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-primary">
@@ -1029,14 +1896,9 @@ export default function ReviewersPage() {
                     </span>
                   )}
 
-                  {/* OFFLINE BADGE */}
-
-                  {downloadedIds.has(
-                    reviewer.id
-                  ) && (
+                  {downloadedIds.has(reviewer.id) && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
                       <CheckCircle2 className="h-3 w-3" />
-
                       Saved Offline
                     </span>
                   )}
@@ -1045,24 +1907,17 @@ export default function ReviewersPage() {
                 {/* CONTENT PREVIEW */}
 
                 <p className="mt-1.5 line-clamp-1 text-[13px] text-muted-foreground">
-                  {String(
-                    reviewer.content ?? ""
-                  )
-                    .replace(
-                      /[#*_`>-]/g,
-                      " "
-                    )
+                  {String(reviewer.content ?? "")
+                    .replace(/[#*_`>-]/g, " ")
                     .slice(0, 160)}
                 </p>
 
-                {/* DATE */}
+                {/* UPDATED DATE */}
 
                 <p className="mt-1.5 text-[11px] text-muted-foreground">
                   {tab === "downloaded"
                     ? `Downloaded ${formatDate(
-                        savedAtById.has(
-                          reviewer.id
-                        )
+                        savedAtById.has(reviewer.id)
                           ? new Date(
                               savedAtById.get(
                                 reviewer.id
@@ -1076,13 +1931,9 @@ export default function ReviewersPage() {
                 </p>
               </div>
 
-              {/* ==================================
-                  ACTION BUTTONS
-              ================================== */}
+              {/* ACTION BUTTONS */}
 
               <div className="flex shrink-0 items-center gap-2">
-                {/* READ REVIEWER */}
-
                 <Link
                   to={`/reviewers/${encodeURIComponent(
                     reviewer.id
@@ -1094,8 +1945,6 @@ export default function ReviewersPage() {
 
                 {tab === "online" ? (
                   <>
-                    {/* EDIT ONLINE REVIEWER */}
-
                     <Link
                       to={`/reviewers/${encodeURIComponent(
                         reviewer.id
@@ -1105,8 +1954,6 @@ export default function ReviewersPage() {
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Link>
-
-                    {/* DELETE ONLINE REVIEWER */}
 
                     <button
                       type="button"
@@ -1124,8 +1971,7 @@ export default function ReviewersPage() {
                       title="Delete online reviewer"
                       className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
                     >
-                      {deletingId ===
-                      reviewer.id ? (
+                      {deletingId === reviewer.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Trash2 className="h-4 w-4" />
@@ -1133,8 +1979,6 @@ export default function ReviewersPage() {
                     </button>
                   </>
                 ) : (
-                  /* REMOVE DOWNLOADED COPY */
-
                   <button
                     type="button"
                     onClick={() => {
@@ -1143,16 +1987,14 @@ export default function ReviewersPage() {
                       );
                     }}
                     disabled={
-                      removingLocalId !==
-                        null ||
+                      removingLocalId !== null ||
                       deletingId !== null
                     }
                     aria-label={`Remove offline download of ${reviewer.title}`}
                     title="Remove offline copy only"
                     className="grid h-9 w-9 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive disabled:opacity-50"
                   >
-                    {removingLocalId ===
-                    reviewer.id ? (
+                    {removingLocalId === reviewer.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <Trash2 className="h-4 w-4" />
