@@ -434,7 +434,6 @@ function filenameFromTitle(title: string): string {
 
   return `${safe || "StudyRoom-Reviewer"}.pdf`;
 }
-
 // ==========================================
 // HTML ELEMENT HELPER
 // ==========================================

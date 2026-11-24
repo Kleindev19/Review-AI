@@ -12,7 +12,7 @@ export type PdfVisualPage = {
 
 const MAX_PAGES = 3;
 const MAX_DIMENSION = 1200;
-const JPEG_QUALITY = 0.75;
+const JPEG_QUALITY = 0.8;
 
 /**
  * Converts PDF pages into images so Gemini can
