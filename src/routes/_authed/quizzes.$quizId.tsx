@@ -36,7 +36,9 @@ import {
   type QuizAttempt,
 } from "../../lib/quizStore";
 
+// ==========================================
 // TYPES
+// ==========================================
 
 type QuestionDraft = {
   type: QuestionType;
@@ -61,7 +63,9 @@ type QuizResult = {
   graded: GradedAnswer[];
 };
 
+// ==========================================
 // CONSTANTS
+// ==========================================
 
 const QUESTION_TYPES = {
   multiple_choice: "Multiple choice",
@@ -71,9 +75,18 @@ const QUESTION_TYPES = {
   mixed: "Mixed exam",
 };
 
-const LETTERS = ["A", "B", "C", "D", "E", "F"];
+const LETTERS = [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+];
 
+// ==========================================
 // HELPERS
+// ==========================================
 
 function normalize(value: string): string {
   return value
@@ -91,33 +104,56 @@ function makeDraft(
     question: "",
     options: ["", "", "", ""],
     correctIndex: 0,
-    answer: type === "true_false" ? "True" : "",
+
+    answer:
+      type === "true_false"
+        ? "True"
+        : "",
+
     explanation: "",
   };
 }
 
-function resolveCorrectAnswer(question: QuizQuestion): string {
+function resolveCorrectAnswer(
+  question: QuizQuestion
+): string {
   const answer = question.answer.trim();
 
-  if (question.type !== "multiple_choice") {
+  if (
+    question.type !== "multiple_choice"
+  ) {
     return answer;
   }
 
-  const directMatch = question.options.find(
-    (option) => normalize(option) === normalize(answer)
-  );
+  const directMatch =
+    question.options.find(
+      (option) =>
+        normalize(option) ===
+        normalize(answer)
+    );
 
-  if (directMatch) return directMatch;
+  if (directMatch) {
+    return directMatch;
+  }
 
   if (/^[A-F]$/i.test(answer)) {
-    const index = answer.toUpperCase().charCodeAt(0) - 65;
-    return question.options[index] ?? answer;
+    const index =
+      answer
+        .toUpperCase()
+        .charCodeAt(0) - 65;
+
+    return (
+      question.options[index] ??
+      answer
+    );
   }
 
   return answer;
 }
 
-function getQuestionOptions(question: QuizQuestion): string[] {
+function getQuestionOptions(
+  question: QuizQuestion
+): string[] {
   if (question.type === "true_false") {
     return ["True", "False"];
   }
@@ -129,7 +165,10 @@ function getQuestionOptions(question: QuizQuestion): string[] {
   return [];
 }
 
-function formatAnswer(value: string, type: QuestionType): string {
+function formatAnswer(
+  value: string,
+  type: QuestionType
+): string {
   return type === "enumeration"
     ? value
         .split(/[;\n]+/)
@@ -139,38 +178,67 @@ function formatAnswer(value: string, type: QuestionType): string {
     : value;
 }
 
+// ==========================================
 // MAIN QUIZ PAGE
+// ==========================================
 
 export default function QuizPage() {
-  const { quizId } = useParams<{ quizId: string }>();
+  const { quizId } = useParams<{
+    quizId: string;
+  }>();
 
+  // ========================================
   // QUIZ STATES
+  // ========================================
 
-  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [quiz, setQuiz] =
+    useState<Quiz | null>(null);
 
   const [answers, setAnswers] =
     useState<Record<string, string>>({});
 
-  const [result, setResult] = useState<QuizResult | null>(null);
+  const [result, setResult] =
+    useState<QuizResult | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [loading, setLoading] =
+    useState(true);
 
+  const [busy, setBusy] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  // ========================================
   // OFFLINE STATES
+  // ========================================
 
   const [isOnline, setIsOnline] =
     useState(() => navigator.onLine);
 
-  const [usingOffline, setUsingOffline] = useState(false);
-  const [hasOfflineCopy, setHasOfflineCopy] = useState(false);
-  const [offlineNeedsUpdate, setOfflineNeedsUpdate] = useState(false);
-  const [savingOffline, setSavingOffline] = useState(false);
-  const [resultSaveNote, setResultSaveNote] = useState("");
+  const [usingOffline, setUsingOffline] =
+    useState(false);
 
+  const [hasOfflineCopy, setHasOfflineCopy] =
+    useState(false);
+
+  const [
+    offlineNeedsUpdate,
+    setOfflineNeedsUpdate,
+  ] = useState(false);
+
+  const [savingOffline, setSavingOffline] =
+    useState(false);
+
+  const [resultSaveNote, setResultSaveNote] =
+    useState("");
+
+  // ========================================
   // MANUAL EDITOR STATES
+  // ========================================
 
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorOpen, setEditorOpen] =
+    useState(false);
 
   const [editingId, setEditingId] =
     useState<string | null>(null);
@@ -178,7 +246,9 @@ export default function QuizPage() {
   const [draft, setDraft] =
     useState<QuestionDraft>(makeDraft());
 
+  // ========================================
   // ONLINE/OFFLINE LISTENER
+  // ========================================
 
   useEffect(() => {
     function handleOnline() {
@@ -189,16 +259,32 @@ export default function QuizPage() {
       setIsOnline(false);
     }
 
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
+    window.addEventListener(
+      "online",
+      handleOnline
+    );
+
+    window.addEventListener(
+      "offline",
+      handleOffline
+    );
 
     return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener(
+        "online",
+        handleOnline
+      );
+
+      window.removeEventListener(
+        "offline",
+        handleOffline
+      );
     };
   }, []);
 
+  // ========================================
   // LOAD QUIZ
+  // ========================================
 
   useEffect(() => {
     let active = true;
@@ -221,20 +307,30 @@ export default function QuizPage() {
           throw new Error("Invalid quiz.");
         }
 
-        let localQuiz: Quiz | null = null;
+        let localQuiz: Quiz | null =
+          null;
 
         try {
-          localQuiz = await getOfflineQuiz(quizId);
+          localQuiz =
+            await getOfflineQuiz(quizId);
         } catch (offlineError) {
-          console.warn("Offline quiz lookup unavailable:", offlineError);
+          console.warn(
+            "Offline quiz lookup unavailable:",
+            offlineError
+          );
         }
 
         if (!active) return;
 
-        setHasOfflineCopy(Boolean(localQuiz));
+        setHasOfflineCopy(
+          Boolean(localQuiz)
+        );
 
-        let record: Quiz | null = null;
-        let offlineSource = false;
+        let record: Quiz | null =
+          null;
+
+        let offlineSource =
+          false;
 
         if (!navigator.onLine) {
           record = localQuiz;
@@ -247,9 +343,12 @@ export default function QuizPage() {
           }
         } else {
           try {
-            record = await getCloudQuiz(quizId);
+            record =
+              await getCloudQuiz(quizId);
           } catch (cloudError) {
-            if (!localQuiz) throw cloudError;
+            if (!localQuiz) {
+              throw cloudError;
+            }
 
             record = localQuiz;
             offlineSource = true;
@@ -278,7 +377,10 @@ export default function QuizPage() {
       } catch (err) {
         if (!active) return;
 
-        console.error("Quiz loading failed:", err);
+        console.error(
+          "Quiz loading failed:",
+          err
+        );
 
         setError(
           err instanceof Error
@@ -286,7 +388,9 @@ export default function QuizPage() {
             : "Could not load this quiz."
         );
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     }
 
@@ -297,10 +401,18 @@ export default function QuizPage() {
     };
   }, [quizId]);
 
+  // ========================================
   // SAVE OFFLINE
+  // ========================================
 
   async function downloadQuiz() {
-    if (!quiz || savingOffline || busy || !isOnline || usingOffline) {
+    if (
+      !quiz ||
+      savingOffline ||
+      busy ||
+      !isOnline ||
+      usingOffline
+    ) {
       return;
     }
 
@@ -309,6 +421,7 @@ export default function QuizPage() {
 
     try {
       await saveQuizForOffline(quiz);
+
       setHasOfflineCopy(true);
       setOfflineNeedsUpdate(false);
     } catch (err) {
@@ -322,42 +435,76 @@ export default function QuizPage() {
     }
   }
 
+  // ========================================
   // ORGANIZED EXAM QUESTIONS
+  // ========================================
 
-  const mixed = quiz?.question_type === "mixed";
+  const mixed =
+    quiz?.question_type === "mixed";
 
   const questions = quiz
-    ? sortExamQuestions(quiz.questions, mixed)
+    ? sortExamQuestions(
+        quiz.questions,
+        mixed
+      )
     : [];
 
-  const answeredCount = questions.filter(
-    (question) => Boolean((answers[question.id] ?? "").trim())
-  ).length;
+  const answeredCount =
+    questions.filter(
+      (question) =>
+        Boolean(
+          (answers[question.id] ?? "").trim()
+        )
+    ).length;
 
-  const answeredPercent = questions.length
-    ? Math.round((answeredCount / questions.length) * 100)
-    : 0;
+  const answeredPercent =
+    questions.length
+      ? Math.round(
+          (answeredCount /
+            questions.length) * 100
+        )
+      : 0;
 
-  const sections = EXAM_PARTS.map((part) => ({
-    ...part,
-    questions: questions.filter(
-      (question) => question.type === part.type
-    ),
-  })).filter((part) => part.questions.length > 0);
+  const sections = EXAM_PARTS
+    .map((part) => ({
+      ...part,
 
-  function setAnswer(questionId: string, value: string) {
+      questions: questions.filter(
+        (question) =>
+          question.type === part.type
+      ),
+    }))
+    .filter(
+      (part) =>
+        part.questions.length > 0
+    );
+
+  function setAnswer(
+    questionId: string,
+    value: string
+  ) {
     if (busy) return;
 
     setAnswers((current) => ({
       ...current,
+
       [questionId]: value,
     }));
   }
 
+  // ========================================
   // OPEN MANUAL EDITOR
+  // ========================================
 
   function openAddQuestion() {
-    if (!quiz || busy || !isOnline || usingOffline) return;
+    if (
+      !quiz ||
+      busy ||
+      !isOnline ||
+      usingOffline
+    ) {
+      return;
+    }
 
     setDraft(
       makeDraft(
@@ -372,36 +519,57 @@ export default function QuizPage() {
     setError("");
   }
 
-  function openEditQuestion(question: QuizQuestion) {
-    if (busy || !isOnline || usingOffline) return;
+  function openEditQuestion(
+    question: QuizQuestion
+  ) {
+    if (
+      busy ||
+      !isOnline ||
+      usingOffline
+    ) {
+      return;
+    }
 
-    const correctAnswer = resolveCorrectAnswer(question);
+    const correctAnswer =
+      resolveCorrectAnswer(question);
 
-    const options = [...question.options];
+    const options = [
+      ...question.options,
+    ];
 
     while (options.length < 4) {
       options.push("");
     }
 
-    const correctIndex = question.options.findIndex(
-      (option) =>
-        normalize(option) === normalize(correctAnswer)
-    );
+    const correctIndex =
+      question.options.findIndex(
+        (option) =>
+          normalize(option) ===
+          normalize(correctAnswer)
+      );
 
     setDraft({
       type: question.type,
       question: question.question,
       options,
-      correctIndex: Math.max(correctIndex, 0),
+
+      correctIndex:
+        Math.max(correctIndex, 0),
+
       answer: correctAnswer,
-      explanation: question.explanation ?? "",
+
+      explanation:
+        question.explanation ?? "",
     });
 
     setEditingId(question.id);
     setEditorOpen(true);
     setError("");
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   function closeEditor() {
@@ -410,9 +578,13 @@ export default function QuizPage() {
     setError("");
   }
 
+  // ========================================
   // SAVE MANUAL QUESTION
+  // ========================================
 
-  async function saveQuestion(event: FormEvent<HTMLFormElement>) {
+  async function saveQuestion(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     if (
@@ -425,54 +597,124 @@ export default function QuizPage() {
       return;
     }
 
-    const questionText = draft.question.trim();
+    const questionText =
+      draft.question.trim();
 
     if (!questionText) {
-      setError("Question text is required.");
+      setError(
+        "Question text is required."
+      );
+
+      return;
+    }
+
+    // Prevent creation of new enumeration
+    // questions while allowing old questions
+    // to remain editable.
+
+    if (
+      draft.type === "enumeration" &&
+      !questions.some(
+        (question) =>
+          question.id === editingId &&
+          question.type === "enumeration"
+      )
+    ) {
+      setError(
+        "Choose Multiple Choice, True or False, or Identification."
+      );
+
       return;
     }
 
     const options =
       draft.type === "multiple_choice"
-        ? draft.options.map((item) => item.trim())
+        ? draft.options.map(
+            (item) => item.trim()
+          )
         : [];
 
-    let answer = draft.answer.trim();
+    let answer =
+      draft.answer.trim();
 
-    if (draft.type === "multiple_choice") {
-      const validOptions = options.filter(Boolean);
+    // ======================================
+    // MULTIPLE CHOICE
+    // ======================================
+
+    if (
+      draft.type === "multiple_choice"
+    ) {
+      const validOptions =
+        options.filter(Boolean);
 
       if (validOptions.length < 2) {
-        setError("Multiple choice requires at least two options.");
+        setError(
+          "Multiple choice requires at least two options."
+        );
+
         return;
       }
 
       if (
-        new Set(validOptions.map(normalize)).size !== validOptions.length
+        new Set(
+          validOptions.map(normalize)
+        ).size !== validOptions.length
       ) {
-        setError("Answer options must be distinct.");
+        setError(
+          "Answer options must be distinct."
+        );
+
         return;
       }
 
-      answer = options[draft.correctIndex] ?? "";
+      answer =
+        options[draft.correctIndex] ??
+        "";
 
       if (!answer) {
-        setError("Select a valid correct answer.");
+        setError(
+          "Select a valid correct answer."
+        );
+
         return;
       }
     }
 
-    if (draft.type === "true_false") {
-      answer = normalize(answer) === "false" ? "False" : "True";
+    // ======================================
+    // TRUE OR FALSE
+    // ======================================
+
+    if (
+      draft.type === "true_false"
+    ) {
+      answer =
+        normalize(answer) === "false"
+          ? "False"
+          : "True";
     }
 
-    if (draft.type === "identification" && !answer) {
-      setError("Enter the correct answer.");
+    // ======================================
+    // IDENTIFICATION
+    // ======================================
+
+    if (
+      draft.type === "identification" &&
+      !answer
+    ) {
+      setError(
+        "Enter the correct answer."
+      );
+
       return;
     }
 
-    if (draft.type === "enumeration") {
-      const items = enumerationItems(answer);
+    // Legacy enumeration editing only.
+
+    if (
+      draft.type === "enumeration"
+    ) {
+      const items =
+        enumerationItems(answer);
 
       if (
         items.length < 2 ||
@@ -481,6 +723,7 @@ export default function QuizPage() {
         setError(
           "Enter at least two distinct answers separated by semicolons or new lines."
         );
+
         return;
       }
 
@@ -492,47 +735,69 @@ export default function QuizPage() {
     }
 
     const newQuestion: QuizQuestion = {
-      id: editingId ?? crypto.randomUUID(),
-      position: questions.length,
+      id:
+        editingId ??
+        crypto.randomUUID(),
+
+      position:
+        questions.length,
+
       type: draft.type,
+
       question: questionText,
+
       options:
         draft.type === "multiple_choice"
           ? options.filter(Boolean)
+
           : draft.type === "true_false"
             ? ["True", "False"]
+
             : [],
+
       answer,
-      explanation: draft.explanation.trim(),
+
+      explanation:
+        draft.explanation.trim(),
     };
 
     const nextQuestions = editingId
-      ? questions.map((question) =>
-          question.id === editingId
-            ? {
-                ...newQuestion,
-                position: question.position,
-              }
-            : question
-        )
-      : [...questions, newQuestion];
+      ? questions.map(
+          (question) =>
+            question.id === editingId
+              ? {
+                  ...newQuestion,
 
-    const orderedQuestions = sortExamQuestions(
-      nextQuestions,
-      mixed
-    ).map((question, position) => ({
-      ...question,
-      position,
-    }));
+                  position:
+                    question.position,
+                }
+              : question
+        )
+      : [
+          ...questions,
+          newQuestion,
+        ];
+
+    const orderedQuestions =
+      sortExamQuestions(
+        nextQuestions,
+        mixed
+      ).map((question, position) => ({
+        ...question,
+        position,
+      }));
 
     setBusy(true);
     setError("");
 
     try {
-      const updated = await updateCloudQuiz({
-        ...quiz,
-        questions: orderedQuestions,
-      });
+      const updated =
+        await updateCloudQuiz({
+          ...quiz,
+
+          questions:
+            orderedQuestions,
+        });
 
       setQuiz(updated);
 
@@ -542,9 +807,13 @@ export default function QuizPage() {
 
       setAnswers({});
       setResult(null);
+
       closeEditor();
     } catch (err) {
-      console.error("Question save error:", err);
+      console.error(
+        "Question save error:",
+        err
+      );
 
       setError(
         err instanceof Error
@@ -556,9 +825,13 @@ export default function QuizPage() {
     }
   }
 
+  // ========================================
   // REMOVE MANUAL QUESTION
+  // ========================================
 
-  async function removeQuestion(id: string) {
+  async function removeQuestion(
+    id: string
+  ) {
     if (
       !quiz ||
       quiz.origin !== "manual" ||
@@ -569,23 +842,35 @@ export default function QuizPage() {
       return;
     }
 
-    if (!window.confirm("Delete this question?")) return;
+    if (
+      !window.confirm(
+        "Delete this question?"
+      )
+    ) {
+      return;
+    }
 
     const remaining = questions
-      .filter((question) => question.id !== id)
-      .map((question, position) => ({
-        ...question,
-        position,
-      }));
+      .filter(
+        (question) =>
+          question.id !== id
+      )
+      .map(
+        (question, position) => ({
+          ...question,
+          position,
+        })
+      );
 
     setBusy(true);
     setError("");
 
     try {
-      const updated = await updateCloudQuiz({
-        ...quiz,
-        questions: remaining,
-      });
+      const updated =
+        await updateCloudQuiz({
+          ...quiz,
+          questions: remaining,
+        });
 
       setQuiz(updated);
 
@@ -596,9 +881,14 @@ export default function QuizPage() {
       setAnswers({});
       setResult(null);
 
-      if (editingId === id) closeEditor();
+      if (editingId === id) {
+        closeEditor();
+      }
     } catch (err) {
-      console.error("Question delete error:", err);
+      console.error(
+        "Question delete error:",
+        err
+      );
 
       setError(
         err instanceof Error
@@ -610,86 +900,154 @@ export default function QuizPage() {
     }
   }
 
+  // ========================================
   // SUBMIT AND GRADE EXAM
+  // ========================================
 
   async function submitQuiz() {
-    if (!quiz || busy || result || questions.length === 0) return;
+    if (
+      !quiz ||
+      busy ||
+      result ||
+      questions.length === 0
+    ) {
+      return;
+    }
 
-    if (answeredCount < questions.length) {
-      const confirmed = window.confirm(
-        `You have ${questions.length - answeredCount} unanswered question(s). Submit anyway?`
-      );
+    if (
+      answeredCount < questions.length
+    ) {
+      const confirmed =
+        window.confirm(
+          `You have ${questions.length - answeredCount} unanswered question(s). Submit anyway?`
+        );
 
-      if (!confirmed) return;
+      if (!confirmed) {
+        return;
+      }
     }
 
     setBusy(true);
     setError("");
 
     try {
-      const graded: GradedAnswer[] = questions.map((question) => {
-        const given = answers[question.id] ?? "";
-        const correctAnswer = resolveCorrectAnswer(question);
+      const graded: GradedAnswer[] =
+        questions.map((question) => {
+          const given =
+            answers[question.id] ?? "";
 
-        const isCorrect =
-          question.type === "enumeration"
-            ? checkEnumeration(given, correctAnswer)
-            : Boolean(normalize(given)) &&
-              normalize(given) === normalize(correctAnswer);
+          const correctAnswer =
+            resolveCorrectAnswer(question);
 
-        return {
-          question,
-          given,
-          correctAnswer,
-          isCorrect,
-        };
-      });
+          const isCorrect =
+            question.type === "enumeration"
 
-      const score = graded.filter((item) => item.isCorrect).length;
-      const total = questions.length;
-      const percentage = Math.round((score / total) * 100);
+              ? checkEnumeration(
+                  given,
+                  correctAnswer
+                )
+
+              : Boolean(normalize(given)) &&
+                normalize(given) ===
+                  normalize(correctAnswer);
+
+          return {
+            question,
+            given,
+            correctAnswer,
+            isCorrect,
+          };
+        });
+
+      const score =
+        graded.filter(
+          (item) => item.isCorrect
+        ).length;
+
+      const total =
+        questions.length;
+
+      const percentage =
+        Math.round(
+          (score / total) * 100
+        );
 
       const attempt: QuizAttempt = {
         id: crypto.randomUUID(),
-        quiz_id: quiz.id,
-        quiz_title: quiz.title,
-        user_name: "You",
-        score,
-        total,
-        percentage,
-        created_date: new Date().toISOString(),
 
-        answers: graded.map((item) => ({
-          id: crypto.randomUUID(),
-          type: item.question.type,
-          question: item.question.question,
-          given_answer: item.given,
-          correct_answer: item.correctAnswer,
-          is_correct: item.isCorrect,
-          explanation: item.question.explanation,
-        })),
+        quiz_id: quiz.id,
+
+        quiz_title: quiz.title,
+
+        user_name: "You",
+
+        score,
+
+        total,
+
+        percentage,
+
+        created_date:
+          new Date().toISOString(),
+
+        answers: graded.map(
+          (item) => ({
+            id: crypto.randomUUID(),
+
+            type:
+              item.question.type,
+
+            question:
+              item.question.question,
+
+            given_answer:
+              item.given,
+
+            correct_answer:
+              item.correctAnswer,
+
+            is_correct:
+              item.isCorrect,
+
+            explanation:
+              item.question.explanation,
+          })
+        ),
       };
 
+      // ====================================
       // SAVE RESULTS
+      // ====================================
 
-      if (!navigator.onLine || usingOffline) {
-        await saveOfflineQuizAttempt(attempt);
+      if (
+        !navigator.onLine ||
+        usingOffline
+      ) {
+        await saveOfflineQuizAttempt(
+          attempt
+        );
 
         setResultSaveNote(
           "Saved on this device only. This attempt has not synced to your account."
         );
       } else {
         try {
-          await saveCloudQuizAttempt(attempt);
+          await saveCloudQuizAttempt(
+            attempt
+          );
 
-          setResultSaveNote("Saved to your StudyRoom account.");
+          setResultSaveNote(
+            "Saved to your StudyRoom account."
+          );
         } catch (cloudError) {
           console.warn(
             "Cloud attempt save failed; trying local storage:",
             cloudError
           );
 
-          await saveOfflineQuizAttempt(attempt);
+          await saveOfflineQuizAttempt(
+            attempt
+          );
 
           setResultSaveNote(
             "Cloud save failed, but this result was saved on this device. It has not synced to your account."
@@ -704,9 +1062,15 @@ export default function QuizPage() {
         graded,
       });
 
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
     } catch (err) {
-      console.error("Submit quiz error:", err);
+      console.error(
+        "Submit quiz error:",
+        err
+      );
 
       setError(
         err instanceof Error
@@ -718,7 +1082,9 @@ export default function QuizPage() {
     }
   }
 
-  // RETAKE
+  // ========================================
+  // RETAKE QUIZ
+  // ========================================
 
   function retakeQuiz() {
     setAnswers({});
@@ -726,10 +1092,15 @@ export default function QuizPage() {
     setResultSaveNote("");
     setError("");
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
+  // ========================================
   // LOADING STATE
+  // ========================================
 
   if (loading) {
     return (
@@ -744,19 +1115,23 @@ export default function QuizPage() {
     return (
       <div className="mx-auto max-w-3xl py-20 text-center">
         <p className="text-sm text-muted-foreground">
-          {error || "This quiz could not be found."}
+          {error ||
+            "This quiz could not be found."}
         </p>
 
-        <Link to="/quizzes" className="btn btn-secondary mt-5">
+        <Link
+          to="/quizzes"
+          className="btn btn-secondary mt-5"
+        >
           Back to quizzes
         </Link>
       </div>
     );
   }
 
-  // ==========================================
+  // ========================================
   // RESULT PAGE
-  // ==========================================
+  // ========================================
 
   if (result) {
     return (
@@ -795,7 +1170,9 @@ export default function QuizPage() {
                   ? "bg-primary"
                   : "bg-destructive"
               }`}
-              style={{ width: `${result.percentage}%` }}
+              style={{
+                width: `${result.percentage}%`,
+              }}
             />
           </div>
 
@@ -804,13 +1181,18 @@ export default function QuizPage() {
           {mixed && (
             <div className="mt-6 divide-y divide-border rounded-xl border border-border">
               {sections.map((section) => {
-                const items = result.graded.filter(
-                  (item) => item.question.type === section.type
-                );
+                const items =
+                  result.graded.filter(
+                    (item) =>
+                      item.question.type ===
+                      section.type
+                  );
 
-                const correct = items.filter(
-                  (item) => item.isCorrect
-                ).length;
+                const correct =
+                  items.filter(
+                    (item) =>
+                      item.isCorrect
+                  ).length;
 
                 return (
                   <div
@@ -831,7 +1213,10 @@ export default function QuizPage() {
           )}
 
           {resultSaveNote && (
-            <p className="mt-4 text-xs text-muted-foreground" role="status">
+            <p
+              className="mt-4 text-xs text-muted-foreground"
+              role="status"
+            >
               {resultSaveNote}
             </p>
           )}
@@ -863,18 +1248,37 @@ export default function QuizPage() {
           </h2>
 
           {result.graded.map(
-            ({ question, given, correctAnswer, isCorrect }, index) => {
+            (
+              {
+                question,
+                given,
+                correctAnswer,
+                isCorrect,
+              },
+              index
+            ) => {
               const isNewSection =
                 mixed &&
-                (index === 0 ||
-                  result.graded[index - 1].question.type !== question.type);
+                (
+                  index === 0 ||
+                  result.graded[index - 1]
+                    .question.type !==
+                    question.type
+                );
 
               return (
-                <div key={question.id} className="space-y-3">
+                <div
+                  key={question.id}
+                  className="space-y-3"
+                >
                   {isNewSection && (
                     <div className="mt-5 rounded-xl border border-border bg-secondary/30 px-5 py-3">
                       <h3 className="text-sm font-semibold text-foreground">
-                        {examPart(question.type)?.title}
+                        {
+                          examPart(
+                            question.type
+                          )?.title
+                        }
                       </h3>
                     </div>
                   )}
@@ -905,7 +1309,12 @@ export default function QuizPage() {
                         Your answer:
 
                         <p className="mt-1 whitespace-pre-wrap break-words text-foreground">
-                          {formatAnswer(given, question.type) || "No answer"}
+                          {
+                            formatAnswer(
+                              given,
+                              question.type
+                            ) || "No answer"
+                          }
                         </p>
                       </div>
 
@@ -914,7 +1323,12 @@ export default function QuizPage() {
                           Correct answer:
 
                           <p className="mt-1 whitespace-pre-wrap break-words">
-                            {formatAnswer(correctAnswer, question.type)}
+                            {
+                              formatAnswer(
+                                correctAnswer,
+                                question.type
+                              )
+                            }
                           </p>
                         </div>
                       )}
@@ -935,9 +1349,9 @@ export default function QuizPage() {
     );
   }
 
-  // ==========================================
+  // ========================================
   // MAIN EXAM PAGE
-  // ==========================================
+  // ========================================
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -953,7 +1367,11 @@ export default function QuizPage() {
 
       <header className="space-y-2 border-b border-border pb-5">
         <p className="text-xs text-muted-foreground">
-          {QUESTION_TYPES[quiz.question_type]}
+          {
+            QUESTION_TYPES[
+              quiz.question_type
+            ]
+          }
         </p>
 
         <h1 className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-foreground">
@@ -979,19 +1397,30 @@ export default function QuizPage() {
 
           <span>
             {hasOfflineCopy
+
               ? offlineNeedsUpdate
                 ? "Offline copy needs updating after your edits."
                 : "Saved Offline - available on this device."
+
               : "Not downloaded for offline practice."}
 
-            {usingOffline ? " Reading a local copy." : ""}
+            {usingOffline
+              ? " Reading a local copy."
+              : ""}
           </span>
         </div>
 
         <button
           type="button"
-          onClick={() => void downloadQuiz()}
-          disabled={savingOffline || busy || !isOnline || usingOffline}
+          onClick={() =>
+            void downloadQuiz()
+          }
+          disabled={
+            savingOffline ||
+            busy ||
+            !isOnline ||
+            usingOffline
+          }
           className="btn btn-secondary btn-sm disabled:opacity-50"
         >
           {savingOffline
@@ -1015,291 +1444,342 @@ export default function QuizPage() {
 
       {/* MANUAL QUESTION EDITOR */}
 
-      {quiz.origin === "manual" && isOnline && !usingOffline && (
-        <section className="panel space-y-4 p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-medium text-foreground">
-                Manage questions
-              </h2>
+      {quiz.origin === "manual" &&
+        isOnline &&
+        !usingOffline && (
+          <section className="panel space-y-4 p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-medium text-foreground">
+                  Manage questions
+                </h2>
 
-              <p className="mt-1 text-xs text-muted-foreground">
-                Add, edit, or delete your questions.
-              </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Add, edit, or delete your questions.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  editorOpen
+                    ? closeEditor
+                    : openAddQuestion
+                }
+                disabled={busy}
+                className="btn btn-secondary btn-sm disabled:opacity-50"
+              >
+                {editorOpen
+                  ? <X className="h-4 w-4" />
+                  : <Plus className="h-4 w-4" />}
+
+                {editorOpen
+                  ? "Close editor"
+                  : "Add question"}
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={editorOpen ? closeEditor : openAddQuestion}
-              disabled={busy}
-              className="btn btn-secondary btn-sm disabled:opacity-50"
-            >
-              {editorOpen
-                ? <X className="h-4 w-4" />
-                : <Plus className="h-4 w-4" />}
+            {editorOpen && (
+              <form
+                onSubmit={(event) =>
+                  void saveQuestion(event)
+                }
+                className="space-y-4 border-t border-border pt-4"
+              >
+                <h3 className="text-sm font-medium text-foreground">
+                  {editingId
+                    ? "Edit question"
+                    : "New question"}
+                </h3>
 
-              {editorOpen ? "Close editor" : "Add question"}
-            </button>
-          </div>
+                {/* THREE QUESTION TYPES */}
 
-          {editorOpen && (
-            <form
-              onSubmit={(event) => void saveQuestion(event)}
-              className="space-y-4 border-t border-border pt-4"
-            >
-              <h3 className="text-sm font-medium text-foreground">
-                {editingId ? "Edit question" : "New question"}
-              </h3>
+                {mixed && (
+                  <label className="block">
+                    <span className="label-xs mb-1.5 block">
+                      Question type
+                    </span>
 
-              {mixed && (
+                    <select
+                      value={draft.type}
+                      onChange={(event) => {
+                        const type =
+                          event.target.value as QuestionType;
+
+                        setDraft({
+                          ...makeDraft(type),
+
+                          question:
+                            draft.question,
+
+                          explanation:
+                            draft.explanation,
+                        });
+                      }}
+                      disabled={busy}
+                      className="select"
+                    >
+                      <option value="multiple_choice">
+                        Multiple choice
+                      </option>
+
+                      <option value="true_false">
+                        True or false
+                      </option>
+
+                      <option value="identification">
+                        Identification
+                      </option>
+
+                      {/* Only show legacy type
+                          when editing an existing
+                          enumeration question. */}
+
+                      {editingId &&
+                        draft.type === "enumeration" && (
+                          <option value="enumeration">
+                            Enumeration (legacy)
+                          </option>
+                        )}
+                    </select>
+                  </label>
+                )}
+
                 <label className="block">
                   <span className="label-xs mb-1.5 block">
-                    Question type
-                  </span>
-
-                  <select
-                    value={draft.type}
-                    onChange={(event) => {
-                      const type = event.target.value as QuestionType;
-
-                      setDraft({
-                        ...makeDraft(type),
-                        question: draft.question,
-                        explanation: draft.explanation,
-                      });
-                    }}
-                    disabled={busy}
-                    className="select"
-                  >
-                    <option value="multiple_choice">
-                      Multiple choice
-                    </option>
-
-                    <option value="true_false">
-                      True or false
-                    </option>
-
-                    <option value="identification">
-                      Identification
-                    </option>
-
-                    <option value="enumeration">
-                      Enumeration
-                    </option>
-                  </select>
-                </label>
-              )}
-
-              <label className="block">
-                <span className="label-xs mb-1.5 block">
-                  Question
-                </span>
-
-                <textarea
-                  value={draft.question}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      question: event.target.value,
-                    })
-                  }
-                  rows={3}
-                  placeholder={
-                    draft.type === "enumeration"
-                      ? "e.g. Enumerate the 3 components of..."
-                      : "Write your question here"
-                  }
-                  disabled={busy}
-                  className="textarea"
-                  required
-                />
-              </label>
-
-              {/* MANUAL MULTIPLE CHOICE */}
-
-              {draft.type === "multiple_choice" && (
-                <div className="space-y-3">
-                  <p className="label-xs">Answer options</p>
-
-                  {draft.options.map((option, index) => (
-                    <label key={index} className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        name="correct-option"
-                        checked={draft.correctIndex === index}
-                        onChange={() =>
-                          setDraft({
-                            ...draft,
-                            correctIndex: index,
-                          })
-                        }
-                        disabled={busy}
-                        title="Mark as correct answer"
-                      />
-
-                      <span className="w-4 text-xs text-muted-foreground">
-                        {LETTERS[index]}
-                      </span>
-
-                      <input
-                        value={option}
-                        onChange={(event) => {
-                          const next = [...draft.options];
-                          next[index] = event.target.value;
-
-                          setDraft({
-                            ...draft,
-                            options: next,
-                          });
-                        }}
-                        placeholder={`Option ${LETTERS[index]}`}
-                        disabled={busy}
-                        className="input min-w-0 flex-1"
-                      />
-                    </label>
-                  ))}
-
-                  <p className="text-xs text-muted-foreground">
-                    Select the radio button beside the correct option.
-                  </p>
-                </div>
-              )}
-
-              {/* MANUAL TRUE OR FALSE */}
-
-              {draft.type === "true_false" && (
-                <label className="block">
-                  <span className="label-xs mb-1.5 block">
-                    Correct answer
-                  </span>
-
-                  <select
-                    value={draft.answer}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        answer: event.target.value,
-                      })
-                    }
-                    disabled={busy}
-                    className="select"
-                  >
-                    <option value="True">True</option>
-                    <option value="False">False</option>
-                  </select>
-                </label>
-              )}
-
-              {/* MANUAL IDENTIFICATION */}
-
-              {draft.type === "identification" && (
-                <label className="block">
-                  <span className="label-xs mb-1.5 block">
-                    Correct answer
-                  </span>
-
-                  <input
-                    value={draft.answer}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        answer: event.target.value,
-                      })
-                    }
-                    placeholder="Enter the correct answer"
-                    disabled={busy}
-                    className="input"
-                    required
-                  />
-                </label>
-              )}
-
-              {/* MANUAL ENUMERATION */}
-
-              {draft.type === "enumeration" && (
-                <label className="block">
-                  <span className="label-xs mb-1.5 block">
-                    Correct answers
+                    Question
                   </span>
 
                   <textarea
-                    rows={4}
-                    value={draft.answer}
+                    value={draft.question}
                     onChange={(event) =>
                       setDraft({
                         ...draft,
-                        answer: event.target.value,
+
+                        question:
+                          event.target.value,
                       })
                     }
-                    placeholder={"Answer one\nAnswer two\nAnswer three"}
+                    rows={3}
+                    placeholder="Write your question here"
                     disabled={busy}
                     className="textarea"
                     required
                   />
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Write one answer per line. The order of answers will not affect grading.
-                  </p>
                 </label>
-              )}
 
-              <label className="block">
-                <span className="label-xs mb-1.5 block">
-                  Explanation (optional)
-                </span>
+                {/* MULTIPLE CHOICE EDITOR */}
 
-                <textarea
-                  value={draft.explanation}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      explanation: event.target.value,
-                    })
-                  }
-                  rows={3}
-                  placeholder="Explain why this answer is correct"
-                  disabled={busy}
-                  className="textarea"
-                />
-              </label>
+                {draft.type === "multiple_choice" && (
+                  <div className="space-y-3">
+                    <p className="label-xs">
+                      Answer options
+                    </p>
 
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeEditor}
-                  disabled={busy}
-                  className="btn btn-ghost btn-sm"
-                >
-                  Cancel
-                </button>
+                    {draft.options.map(
+                      (option, index) => (
+                        <label
+                          key={index}
+                          className="flex items-center gap-3"
+                        >
+                          <input
+                            type="radio"
+                            name="correct-option"
+                            checked={
+                              draft.correctIndex ===
+                              index
+                            }
+                            onChange={() =>
+                              setDraft({
+                                ...draft,
 
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="btn btn-primary btn-sm disabled:opacity-50"
-                >
-                  {busy
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <Check className="h-4 w-4" />}
+                                correctIndex:
+                                  index,
+                              })
+                            }
+                            disabled={busy}
+                            title="Mark as correct answer"
+                          />
 
-                  {busy
-                    ? "Saving..."
-                    : editingId
-                      ? "Save changes"
-                      : "Add question"}
-                </button>
-              </div>
-            </form>
-          )}
-        </section>
-      )}
+                          <span className="w-4 text-xs text-muted-foreground">
+                            {LETTERS[index]}
+                          </span>
 
-      {quiz.origin === "manual" && (!isOnline || usingOffline) && (
-        <p className="text-xs text-muted-foreground">
-          Question editing requires an online connection.
-          You can still answer this quiz offline.
-        </p>
-      )}
+                          <input
+                            value={option}
+                            onChange={(event) => {
+                              const next = [
+                                ...draft.options,
+                              ];
+
+                              next[index] =
+                                event.target.value;
+
+                              setDraft({
+                                ...draft,
+                                options: next,
+                              });
+                            }}
+                            placeholder={`Option ${LETTERS[index]}`}
+                            disabled={busy}
+                            className="input min-w-0 flex-1"
+                          />
+                        </label>
+                      )
+                    )}
+
+                    <p className="text-xs text-muted-foreground">
+                      Select the radio button beside the correct option.
+                    </p>
+                  </div>
+                )}
+
+                {/* TRUE OR FALSE EDITOR */}
+
+                {draft.type === "true_false" && (
+                  <label className="block">
+                    <span className="label-xs mb-1.5 block">
+                      Correct answer
+                    </span>
+
+                    <select
+                      value={draft.answer}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+
+                          answer:
+                            event.target.value,
+                        })
+                      }
+                      disabled={busy}
+                      className="select"
+                    >
+                      <option value="True">
+                        True
+                      </option>
+
+                      <option value="False">
+                        False
+                      </option>
+                    </select>
+                  </label>
+                )}
+
+                {/* IDENTIFICATION EDITOR */}
+
+                {draft.type === "identification" && (
+                  <label className="block">
+                    <span className="label-xs mb-1.5 block">
+                      Correct answer
+                    </span>
+
+                    <input
+                      value={draft.answer}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+
+                          answer:
+                            event.target.value,
+                        })
+                      }
+                      placeholder="Enter the correct answer"
+                      disabled={busy}
+                      className="input"
+                      required
+                    />
+                  </label>
+                )}
+
+                {/* LEGACY ENUMERATION EDITOR */}
+
+                {draft.type === "enumeration" &&
+                  editingId && (
+                    <label className="block">
+                      <span className="label-xs mb-1.5 block">
+                        Correct answers
+                      </span>
+
+                      <textarea
+                        rows={4}
+                        value={draft.answer}
+                        onChange={(event) =>
+                          setDraft({
+                            ...draft,
+
+                            answer:
+                              event.target.value,
+                          })
+                        }
+                        placeholder="Write one answer per line"
+                        disabled={busy}
+                        className="textarea"
+                        required
+                      />
+                    </label>
+                  )}
+
+                <label className="block">
+                  <span className="label-xs mb-1.5 block">
+                    Explanation (optional)
+                  </span>
+
+                  <textarea
+                    value={draft.explanation}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+
+                        explanation:
+                          event.target.value,
+                      })
+                    }
+                    rows={3}
+                    placeholder="Explain why this answer is correct"
+                    disabled={busy}
+                    className="textarea"
+                  />
+                </label>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeEditor}
+                    disabled={busy}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="btn btn-primary btn-sm disabled:opacity-50"
+                  >
+                    {busy
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Check className="h-4 w-4" />}
+
+                    {busy
+                      ? "Saving..."
+                      : editingId
+                        ? "Save changes"
+                        : "Add question"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        )}
+
+      {quiz.origin === "manual" &&
+        (!isOnline || usingOffline) && (
+          <p className="text-xs text-muted-foreground">
+            Question editing requires an online connection.
+            You can still answer this quiz offline.
+          </p>
+        )}
 
       {error && (
         <p
@@ -1347,7 +1827,9 @@ export default function QuizPage() {
             <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-secondary">
               <div
                 className="h-full rounded-full bg-primary transition-all duration-300"
-                style={{ width: `${answeredPercent}%` }}
+                style={{
+                  width: `${answeredPercent}%`,
+                }}
               />
             </div>
           </div>
@@ -1360,12 +1842,18 @@ export default function QuizPage() {
                 Exam sections
               </h2>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 {sections.map((section) => {
-                  const completed = section.questions.filter(
-                    (question) =>
-                      Boolean((answers[question.id] ?? "").trim())
-                  ).length;
+                  const completed =
+                    section.questions.filter(
+                      (question) =>
+                        Boolean(
+                          (
+                            answers[question.id] ??
+                            ""
+                          ).trim()
+                        )
+                    ).length;
 
                   return (
                     <button
@@ -1373,7 +1861,9 @@ export default function QuizPage() {
                       type="button"
                       onClick={() => {
                         document
-                          .getElementById(`exam-${section.type}`)
+                          .getElementById(
+                            `exam-${section.type}`
+                          )
                           ?.scrollIntoView({
                             behavior: "smooth",
                             block: "start",
@@ -1398,185 +1888,234 @@ export default function QuizPage() {
           {/* ORGANIZED EXAM QUESTIONS */}
 
           <div className="space-y-4">
-            {questions.map((question, index) => {
-              const options = getQuestionOptions(question);
-              const part = examPart(question.type);
+            {questions.map(
+              (question, index) => {
+                const options =
+                  getQuestionOptions(
+                    question
+                  );
 
-              const isNewSection =
-                mixed &&
-                (index === 0 ||
-                  questions[index - 1].type !== question.type);
+                const part =
+                  examPart(question.type);
 
-              const sectionCount = questions.filter(
-                (item) => item.type === question.type
-              ).length;
+                const isNewSection =
+                  mixed &&
+                  (
+                    index === 0 ||
+                    questions[index - 1].type !==
+                      question.type
+                  );
 
-              return (
-                <div key={question.id} className="space-y-3">
+                const sectionCount =
+                  questions.filter(
+                    (item) =>
+                      item.type ===
+                      question.type
+                  ).length;
 
-                  {/* PART I - IV HEADER */}
+                return (
+                  <div
+                    key={question.id}
+                    className="space-y-3"
+                  >
+                    {/* EXAM SECTION HEADER */}
 
-                  {isNewSection && part && (
-                    <header
-                      id={`exam-${question.type}`}
-                      className="mt-6 scroll-mt-24 rounded-xl border border-border bg-secondary/40 px-5 py-4"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h2 className="text-sm font-bold tracking-wide text-foreground sm:text-base">
-                          {part.title}
-                        </h2>
+                    {isNewSection && part && (
+                      <header
+                        id={`exam-${question.type}`}
+                        className="mt-6 scroll-mt-24 rounded-xl border border-border bg-secondary/40 px-5 py-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h2 className="text-sm font-bold tracking-wide text-foreground sm:text-base">
+                            {part.title}
+                          </h2>
 
-                        <span className="text-xs font-medium text-muted-foreground">
-                          Items {index + 1}–{index + sectionCount}
-                        </span>
-                      </div>
+                          <span className="text-xs font-medium text-muted-foreground">
+                            Items {index + 1}–{index + sectionCount}
+                          </span>
+                        </div>
 
-                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        <span className="font-semibold">
-                          Directions:
-                        </span>{" "}
-                        {part.instructions}
-                      </p>
-                    </header>
-                  )}
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          <span className="font-semibold">
+                            Directions:
+                          </span>{" "}
 
-                  {/* INDIVIDUAL QUESTION */}
-
-                  <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
-                    <div className="flex gap-3">
-                      <span className="mt-0.5 grid h-7 min-w-7 shrink-0 place-items-center rounded-md bg-secondary px-1 text-xs font-medium text-muted-foreground">
-                        {index + 1}
-                      </span>
-
-                      <div className="min-w-0 flex-1">
-                        <p className="whitespace-pre-wrap text-[15px] font-medium leading-relaxed text-foreground">
-                          {question.question}
+                          {part.instructions}
                         </p>
+                      </header>
+                    )}
 
-                        {!mixed && (
-                          <p className="mt-1 text-[11px] text-muted-foreground">
-                            {QUESTION_TYPES[question.type]}
+                    {/* QUESTION CARD */}
+
+                    <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
+                      <div className="flex gap-3">
+                        <span className="mt-0.5 grid h-7 min-w-7 shrink-0 place-items-center rounded-md bg-secondary px-1 text-xs font-medium text-muted-foreground">
+                          {index + 1}
+                        </span>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="whitespace-pre-wrap text-[15px] font-medium leading-relaxed text-foreground">
+                            {question.question}
                           </p>
-                        )}
+
+                          {!mixed && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              {
+                                QUESTION_TYPES[
+                                  question.type
+                                ]
+                              }
+                            </p>
+                          )}
+                        </div>
+
+                        {/* EDIT AND DELETE */}
+
+                        {quiz.origin === "manual" &&
+                          isOnline &&
+                          !usingOffline && (
+                            <div className="flex shrink-0 gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditQuestion(
+                                    question
+                                  )
+                                }
+                                disabled={busy}
+                                aria-label={`Edit question ${index + 1}`}
+                                title="Edit question"
+                                className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-50"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void removeQuestion(
+                                    question.id
+                                  )
+                                }
+                                disabled={busy}
+                                aria-label={`Delete question ${index + 1}`}
+                                title="Delete question"
+                                className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground hover:text-destructive disabled:opacity-50"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          )}
                       </div>
 
-                      {/* EDIT AND DELETE */}
+                      {/* ANSWER FIELD */}
 
-                      {quiz.origin === "manual" &&
-                        isOnline &&
-                        !usingOffline && (
-                          <div className="flex shrink-0 gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openEditQuestion(question)}
-                              disabled={busy}
-                              aria-label={`Edit question ${index + 1}`}
-                              title="Edit question"
-                              className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-50"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
+                      <div className="mt-4 space-y-2 sm:pl-10">
+                        {options.length > 0 ? (
+                          options.map(
+                            (
+                              option,
+                              optionIndex
+                            ) => {
+                              const selected =
+                                answers[question.id] ===
+                                option;
 
-                            <button
-                              type="button"
-                              onClick={() => void removeQuestion(question.id)}
+                              return (
+                                <button
+                                  key={`${question.id}-${optionIndex}`}
+                                  type="button"
+                                  onClick={() =>
+                                    setAnswer(
+                                      question.id,
+                                      option
+                                    )
+                                  }
+                                  disabled={busy}
+                                  aria-pressed={selected}
+                                  className={`quiz-answer-option flex w-full items-center gap-3 rounded-lg border px-3.5 py-2.5 text-left text-[13.5px] transition-colors disabled:opacity-50 ${
+                                    selected
+                                      ? "border-primary/60 bg-primary/10 text-foreground"
+                                      : "border-border text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                                  }`}
+                                >
+                                  <span
+                                    className={`quiz-answer-letter grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px] font-medium ${
+                                      selected
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : "border-border text-muted-foreground"
+                                    }`}
+                                  >
+                                    {question.type === "true_false"
+
+                                      ? option === "True"
+                                        ? "T"
+                                        : "F"
+
+                                      : LETTERS[optionIndex]}
+                                  </span>
+
+                                  <span className="min-w-0 break-words">
+                                    {option}
+                                  </span>
+                                </button>
+                              );
+                            }
+                          )
+                        ) : question.type === "enumeration" ? (
+
+                          // Legacy saved questions only.
+
+                          <div className="space-y-2">
+                            <textarea
+                              value={
+                                answers[question.id] ??
+                                ""
+                              }
+                              onChange={(event) =>
+                                setAnswer(
+                                  question.id,
+                                  event.target.value
+                                )
+                              }
+                              rows={4}
+                              placeholder="Write one answer per line..."
+                              aria-label={`Answer for question ${index + 1}`}
                               disabled={busy}
-                              aria-label={`Delete question ${index + 1}`}
-                              title="Delete question"
-                              className="grid h-8 w-8 place-items-center rounded-lg border border-border text-muted-foreground hover:text-destructive disabled:opacity-50"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                              className="textarea w-full"
+                            />
+
+                            <p className="text-[11px] text-muted-foreground">
+                              Separate each answer using a new line or semicolon.
+                            </p>
                           </div>
-                        )}
-                    </div>
+                        ) : (
 
-                    {/* QUESTION ANSWER FIELD */}
+                          // Identification answer.
 
-                    <div className="mt-4 space-y-2 sm:pl-10">
-                      {options.length > 0 ? (
-                        options.map((option, optionIndex) => {
-                          const selected =
-                            answers[question.id] === option;
-
-                          return (
-                            <button
-                              key={`${question.id}-${optionIndex}`}
-                              type="button"
-                              onClick={() => setAnswer(question.id, option)}
-                              disabled={busy}
-                              aria-pressed={selected}
-                              className={`quiz-answer-option flex w-full items-center gap-3 rounded-lg border px-3.5 py-2.5 text-left text-[13.5px] transition-colors disabled:opacity-50 ${
-                                selected
-                                  ? "border-primary/60 bg-primary/10 text-foreground"
-                                  : "border-border text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                              }`}
-                            >
-                              <span
-                                className={`quiz-answer-letter grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px] font-medium ${
-                                  selected
-                                    ? "border-primary bg-primary text-primary-foreground"
-                                    : "border-border text-muted-foreground"
-                                }`}
-                              >
-                                {question.type === "true_false"
-                                  ? option === "True" ? "T" : "F"
-                                  : LETTERS[optionIndex]}
-                              </span>
-
-                              <span className="min-w-0 break-words">
-                                {option}
-                              </span>
-                            </button>
-                          );
-                        })
-                      ) : question.type === "enumeration" ? (
-
-                        /* ENUMERATION ANSWER */
-
-                        <div className="space-y-2">
-                          <textarea
-                            value={answers[question.id] ?? ""}
+                          <input
+                            value={
+                              answers[question.id] ??
+                              ""
+                            }
                             onChange={(event) =>
                               setAnswer(
                                 question.id,
                                 event.target.value
                               )
                             }
-                            rows={4}
-                            placeholder="Write one answer per line..."
+                            placeholder="Type your answer"
                             aria-label={`Answer for question ${index + 1}`}
                             disabled={busy}
-                            className="textarea w-full"
+                            className="input"
                           />
-
-                          <p className="text-[11px] text-muted-foreground">
-                            Separate each answer using a new line or semicolon.
-                          </p>
-                        </div>
-                      ) : (
-
-                        /* IDENTIFICATION ANSWER */
-
-                        <input
-                          value={answers[question.id] ?? ""}
-                          onChange={(event) =>
-                            setAnswer(
-                              question.id,
-                              event.target.value
-                            )
-                          }
-                          placeholder="Type your answer"
-                          aria-label={`Answer for question ${index + 1}`}
-                          disabled={busy}
-                          className="input"
-                        />
-                      )}
-                    </div>
-                  </section>
-                </div>
-              );
-            })}
+                        )}
+                      </div>
+                    </section>
+                  </div>
+                );
+              }
+            )}
           </div>
 
           {/* SUBMIT EXAM */}
@@ -1584,7 +2123,9 @@ export default function QuizPage() {
           <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-muted-foreground">
               {answeredCount === questions.length
+
                 ? "All questions answered. Submit when you're ready."
+
                 : `${questions.length - answeredCount} question(s) remaining. Your result will be saved ${
                     !isOnline || usingOffline
                       ? "on this device"
@@ -1594,15 +2135,22 @@ export default function QuizPage() {
 
             <button
               type="button"
-              onClick={() => void submitQuiz()}
-              disabled={busy || editorOpen}
+              onClick={() =>
+                void submitQuiz()
+              }
+              disabled={
+                busy ||
+                editorOpen
+              }
               className="btn btn-primary disabled:opacity-50 sm:shrink-0"
             >
               {busy
                 ? <Loader2 className="h-4 w-4 animate-spin" />
                 : <ArrowRight className="h-4 w-4" />}
 
-              {busy ? "Saving result..." : "Submit quiz"}
+              {busy
+                ? "Saving result..."
+                : "Submit quiz"}
             </button>
           </div>
         </>
